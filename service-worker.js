@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'draglog-mt-';
-const CACHE = PREFIX + 'v70';   // v70 : le mot de la reference, court
+const CACHE = PREFIX + 'v71';   // v71 : la case Potentiel retiree, meteo cachee en smart
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg', '../circuits_index.csv', '../circuits_offsets.csv'];
 
 self.addEventListener('install', (ev) => {

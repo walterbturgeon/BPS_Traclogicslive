@@ -196,7 +196,6 @@
       <div><div class="small">Tour</div><div class="grand" id="tNum"></div><div class="small" id="tSess"></div></div>
       <div><div class="small">Temps</div><div class="grand" id="tTemps"></div></div>
       <div id="caseEcart"><div class="small">Écart vs précédent</div><div class="grand" id="tEcart"></div></div>
-      <div id="casePotentiel" style="display:none"><div class="small">Potentiel (tour idéal)</div><div class="grand" id="tPotentiel"></div></div>
       <div><div class="small">Écart vs meilleur (session)</div><div class="grand" id="tBest"></div></div>
       <div id="meteoCase" style="display:none"><div class="small">Météo au circuit</div><div class="grand" id="tMeteo" style="font-size:1.35em"></div><div class="small" id="tMeteoSous" style="display:none"></div></div>
     </div>
@@ -248,7 +247,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v70';
+var PAGE_VER = 'MT v71';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1184,8 +1183,6 @@ function rendre0() {
     return '<span class="bande" style="margin-left:0;background:' + (m.n === 3 ? 'var(--warn)' : '#c47f1b') + '">' + m.txt + '</span>';
   }).join(' ');
   document.getElementById('caseEcart').style.display = smartOn ? 'none' : '';        // [v46]
-  document.getElementById('casePotentiel').style.display = smartOn ? '' : 'none';
-  if (smartOn) { document.getElementById('tPotentiel').textContent = '—'; document.getElementById('tPotentiel').style.color = ''; }
   document.getElementById('tBest').textContent = best && lap.dureeMs != null ? (lap === best ? 'meilleur' : ecartTexte(lap.dureeMs - best.dureeMs)) : '—';
   // [v37] la meteo au circuit : la case n'existe que si une reponse est arrivee
   var mc = document.getElementById('meteoCase'), mt = lap.meteo || null;
@@ -1193,7 +1190,7 @@ function rendre0() {
     mt = meteoDemander(lap.oLat, lap.oLon);
     lap._mac = v.mac; meteoCollerAuTour(lap, mt);   // [v39] un tour frais garde sa meteo
   }
-  mc.style.display = mt ? '' : 'none';
+  mc.style.display = (mt && !smartOn) ? '' : 'none';   // [v71] en smart, la meteo sert au tri des tours, elle ne s'affiche plus
   if (mt) {
     document.getElementById('tMeteo').textContent = Math.round(mt.degres) + ' °C · H2O ' + mt.pluie.toFixed(1).replace('.', ',') + ' mm/h';
     // [v38] une seule ligne : le chiffre parle, rien dessous
@@ -1756,9 +1753,7 @@ function circuitRendre(v, lap) {
     var ideal = 0, complet = !!meilleurs;
     if (meilleurs) meilleurs.forEach(function (x) { if (x == null) complet = false; else ideal += x; });
     var txt = complet ? '<b>Tour idéal ' + duree(ideal) + '</b>' + (lap.dureeMs != null ? ' <span class="small">(' + ecartTexte(ideal - lap.dureeMs) + ' sur ce tour)</span>' : '') : '';
-    var cp = document.getElementById('tPotentiel');   // [v46] la case des grands chiffres
-    if (complet && lap.dureeMs != null) { cp.textContent = ecartTexte(ideal - lap.dureeMs); cp.style.color = (lap.dureeMs - ideal) > 500 ? 'var(--warn)' : 'var(--ok)'; }
-    else { cp.textContent = '—'; cp.style.color = ''; }
+    // [v71] la case « Potentiel » est retiree : le tour ideal reste dans la phrase, sous le tableau
     if (horsCeTour) {   // [v65] ni cause ni conseil : on dit pourquoi ce tour ne compte pas
       bande.textContent = 'tour hors analyse · ' + horsCeTour;
       bande.style.background = 'var(--muted)';
