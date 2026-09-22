@@ -138,7 +138,11 @@
 <div id="voiture" style="display:none">
   <div class="card">
     <div class="row" style="justify-content:space-between">
-      <div><span class="grand" id="vNom"></span> <span class="small" id="vSub"></span></div>
+      <div><span class="grand" id="vNom"></span> <span class="small" id="vSub"></span>
+        <button class="btn sec icone" onclick="partagerVoiture()" aria-label="Envoyer par courriel" title="Envoyer les tours de cette voiture par courriel" style="margin-left:8px;vertical-align:middle">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>
+          </svg></button></div>
       <div class="row">
         <button class="btn sec" onclick="ligneRefaire()">Refaire la ligne</button>
         <button class="btn sec" onclick="toursEffacer()">Effacer les tours</button>
@@ -199,7 +203,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v42';
+var PAGE_VER = 'MT v43';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -296,6 +300,35 @@ function jrn(t) {
   var e = document.getElementById('jrn'); if (e) { e.textContent = jrnLignes.join('\n'); e.scrollTop = e.scrollHeight; }
 }
 function jrnEffacer() { jrnLignes = []; jrn('Journal efface.'); }
+function partagerVoiture(mac) {
+  mac = mac || vueMac;
+  var v = mac && voitures[mac];
+  if (!v) { jrn('Aucune voiture affichee : rien a envoyer.'); return; }
+  var sessions = sessionsDe(v), nTours = Object.keys(v.laps).length;
+  var horo = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+  var nomFichier = 'tracklogics_' + v.nom.replace(/[^A-Za-z0-9_-]/g, '') + '_' + horo + '.csv';
+  var sujet = 'TRACLOGICS ' + v.nom + ' \u2014 ' + nTours + ' tour(s)';
+  var corps = v.nom + ' (n\u00b0 ' + v.num + ')\n';
+  sessions.slice().reverse().forEach(function (sn) {
+    corps += '\n' + jourTexte(sn.debutMs) + ' \u2014 session ' + sn.numJour + ' \u00b7 ' + heureTexte(sn.debutMs)
+           + (sn.finMs > sn.debutMs ? ' \u2013 ' + heureTexte(sn.finMs) : '') + ' \u00b7 ' + sn.n + ' tour(s)'
+           + (sn.best ? ' \u00b7 meilleur ' + duree(sn.best.dureeMs) : '') + '\n';
+    sn.laps.slice().reverse().forEach(function (l) { corps += '  #' + lapNumAff(l) + '  ' + duree(l.dureeMs) + '\n'; });
+  });
+  corps += '\nLe detail de chaque tour est dans ' + nomFichier + ' (point-virgule, UTF-8).\nTRACLOGICS Live, page ' + PAGE_VER + '.\n';
+  var csv = toursCsv(mac, true), blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  var fichier = null;
+  try { fichier = new File([blob], nomFichier, { type: 'text/csv' }); } catch (e) {}
+  if (fichier && navigator.canShare && navigator.canShare({ files: [fichier] })) {
+    navigator.share({ files: [fichier], title: sujet, text: corps })
+      .then(function () { jrn('Envoi : ' + nTours + ' tour(s) de ' + v.nom + ' partages.'); })
+      .catch(function () {});   // l'utilisateur a ferme le choix : rien a dire
+    return;
+  }
+  csvTelecharger(nomFichier, csv);   // mailto n'attache rien : le fichier part dans les telechargements
+  location.href = 'mailto:?subject=' + encodeURIComponent(sujet) + '&body=' + encodeURIComponent(corps);
+  jrn('Envoi : courriel ouvert, ' + nomFichier + ' est dans les telechargements (a joindre a la main).');
+}
 function jrnPartager() {
   var corps = 'TRACKLOGICS MT -- journal\n' + new Date().toString() + '\npage ' + PAGE_VER + '\n\n';
   ordreVoitures.forEach(function (m) { var v = voitures[m]; corps += 'voiture ' + v.nom + ' ' + m + ' num=' + v.num + ' fw=' + v.fw + ' tours=' + Object.keys(v.laps).length + '\n'; });
@@ -1060,9 +1093,10 @@ function csvTelecharger(nom, texte) {
   a.href = URL.createObjectURL(b); a.download = nom; a.click();
 }
 function csvChamp(x) { x = String(x == null ? '' : x); return /[;"\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }
-function toursCsv() {
+function toursCsv(filtreMac, rendreTexte) {   // [v43] une seule voiture, et le texte au lieu du fichier
   var lignes = ['voiture;mac;num;jour;session;session_debut;tour;tour_fil;tour_debut;tour_fin;temps_s;ecart_precedent_s;chrono;recu;p1_nom;p1_unite;p1_min;p1_moy;p1_max;p1_n;p2_nom;p2_unite;p2_min;p2_moy;p2_max;p2_n;p3_nom;p3_unite;p3_min;p3_moy;p3_max;p3_n;p4_nom;p4_unite;p4_min;p4_moy;p4_max;p4_n;p5_nom;p5_unite;p5_min;p5_moy;p5_max;p5_n;p6_nom;p6_unite;p6_min;p6_moy;p6_max;p6_n;p7_nom;p7_unite;p7_min;p7_moy;p7_max;p7_n;p8_nom;p8_unite;p8_min;p8_moy;p8_max;p8_n;meteo_c;meteo_mm_h;meteo_heure;origine_lat;origine_lon;dist_max_m;points_trace'];
   ordreVoitures.forEach(function (m) {
+    if (filtreMac && m !== filtreMac) return;
     var v = voitures[m], laps = lapsTries(v), sessions = sessionsDe(v);
     laps.forEach(function (l, i) {
       var sn = null; sessions.forEach(function (x) { if (x.cle === lapSessionCle(l)) sn = x; });
@@ -1081,6 +1115,7 @@ function toursCsv() {
       lignes.push(r.map(csvChamp).join(';'));
     });
   });
+  if (rendreTexte) return lignes.join('\n');
   csvTelecharger('tracklogics_tours_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.csv', lignes.join('\n'));
   jrn('Export CSV : ' + (lignes.length - 1) + ' tour(s).');
 }
