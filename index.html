@@ -132,7 +132,8 @@
     <button class="btn sec" onclick="smartZero()">Remettre le smart à zéro</button>
     <span class="small" id="smartZeroEtat"></span>
   </div>
-  <div class="small" style="margin:-4px 0 10px;opacity:.8">Après une qualification sur piste vide : les tours d'avant restent affichés mais ne servent plus de référence de vitesse. Les températures gardent toute la journée.</div>
+  <div class="small" style="margin:-4px 0 10px;opacity:.8">Après une qualification sur piste vide : les tours d'avant restent affichés mais ne servent plus de référence de vitesse.
+    Les <b>températures mécaniques</b> (eau, huile, air d'admission, suralimentation, échappement, boîte, freins, pneus) gardent toute la journée : elles bougent peu d'une séance à l'autre.</div>
   <div class="row" style="margin-bottom:10px"><span class="small">Thème</span>
     <button class="btn sec icone" id="btnTheme" onclick="themeSuivant()" aria-label="Thème">◐</button>
     <span class="small" id="themeNom"></span></div>
@@ -225,7 +226,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v50';
+var PAGE_VER = 'MT v51';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -587,7 +588,10 @@ function canValeurA(lap, ech, k, tMs) {
 // ou tous deux mouilles. Un tour sous la pluie ne se compare pas a un tour au sec.
 var smartOn = false;
 var RE_GAZ = /throttle|papillon|tps/i, RE_RPM = /rpm|engine speed|regime/i;
-var RE_TEMP = /temp|eau|huile|coolant|oil t/i;
+var RE_TEMP = /temp|^t_|coolant|huile|eau|iat|cact|egt|pneu|tire|tyre/i;
+var RE_PAS_TEMP = /amb|ambiant|ambient|track|piste|cam\b/i;
+var RE_TEMP_LARGE = /pneu|tire|tyre|frein|brake|egt|echap|exhaust/i;   // ces familles bougent beaucoup
+function tempSeuil(nom) { return RE_TEMP_LARGE.test(nom) ? 15 : 8; }
 // [v50] REMETTRE LE SMART A ZERO. Une qualification sur piste vide donne des sections que la
 // course ne reverra pas : elles ecrasent le tour ideal et faussent les conseils. Le bouton pose
 // une DATE : les tours d'avant restent affiches, mais ne servent plus de reference de VITESSE.
@@ -624,7 +628,7 @@ function smartTemps(v, lap) {
   if (!lap.cat) return [];
   var sorties = [];
   for (var k = 0; k < 8; k++) {
-    var c = lap.cat.ch[k]; if (!c || !RE_TEMP.test(c.nom)) continue;
+    var c = lap.cat.ch[k]; if (!c || !RE_TEMP.test(c.nom) || RE_PAS_TEMP.test(c.nom)) continue;
     var maxi = [];
     lapsJour(v, lap).forEach(function (l) {
       var r = canResume(l, canEchantillons(l), k); if (r) maxi.push(r.max);
@@ -633,7 +637,7 @@ function smartTemps(v, lap) {
     maxi.sort(function (x, y) { return x - y; });
     var med = maxi[Math.floor(maxi.length / 2)];
     var ici = canResume(lap, canEchantillons(lap), k); if (!ici) continue;
-    if (ici.max - med >= 8) sorties.push('\u26a0 ' + c.nom + ' +' + Math.round(ici.max - med) + ' ' + (c.unite || '') + ' vs la journée');
+    if (ici.max - med >= tempSeuil(c.nom)) sorties.push('\u26a0 ' + c.nom + ' +' + Math.round(ici.max - med) + ' ' + (c.unite || '') + ' vs la journée');
   }
   return sorties;
 }
