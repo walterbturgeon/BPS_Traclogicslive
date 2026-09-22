@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'traclogics-mt-';
-const CACHE = PREFIX + 'v34';   // v34 : bouton Connect vert quand connecte, voitures sur la ligne du haut
+const CACHE = PREFIX + 'v36';   // v36 : le texte d etat disparait quand la connexion tient
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg', './circuits_index.csv', './circuits_offsets.csv'];
 
 self.addEventListener('install', (ev) => {

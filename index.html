@@ -60,6 +60,7 @@
     .deux { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr); gap:12px; align-items:start; }
     .deux .listeTours { max-height:calc(100vh - 150px); overflow:auto; }
   }
+  .btn.icone { padding:8px; min-width:38px; line-height:1; font-size:1.05em; }
   .pastille { width:16px; height:16px; padding:0; border-radius:50%; border:2px solid var(--muted); background:transparent; cursor:pointer; vertical-align:middle; margin-right:8px; }
   .pastille.on { border-color:transparent; }
   .jour { font-weight:600; margin:14px 0 4px; padding-bottom:4px; border-bottom:2px solid var(--line); }
@@ -89,7 +90,7 @@
   <div class="row">
     <button class="btn" id="btnConn" onclick="connecter()" title="Se connecter au collecteur RELAY_MT">Connect</button>
     <span id="etat" class="small"></span>
-    <button class="btn sec" id="btnTheme" onclick="themeSuivant()" title="Thème clair, sombre ou automatique" style="margin-left:auto">Thème</button>
+    <button class="btn sec icone" id="btnTheme" onclick="themeSuivant()" aria-label="Thème" style="margin-left:auto">◐</button>
   </div>
   <div class="small" id="collInfo" style="margin-top:6px"></div>
 </div>
@@ -176,7 +177,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v34';
+var PAGE_VER = 'MT v36';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -224,7 +225,10 @@ function themePoser() {
   var r = document.documentElement;
   if (theme === 'auto') r.removeAttribute('data-theme'); else r.setAttribute('data-theme', theme === 'clair' ? 'light' : 'dark');
   var b = document.getElementById('btnTheme');
-  if (b) b.textContent = theme === 'auto' ? 'Thème : auto' : theme === 'clair' ? 'Thème : clair' : 'Thème : sombre';
+  if (b) {
+    b.textContent = theme === 'auto' ? '\u25d0' : theme === 'clair' ? '\u2600' : '\u263d';   // moitie-moitie, soleil, lune
+    b.title = theme === 'auto' ? 'Thème : automatique (suit la tablette)' : theme === 'clair' ? 'Thème : clair' : 'Thème : sombre';
+  }
   var sombre = theme === 'sombre' || (theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   var m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', sombre ? '#14171c' : '#f7f7f7');
   if (vueMac && vueTour != null) rendre();
@@ -275,6 +279,9 @@ function connBouton(ok) {
   b.style.background = ok ? 'var(--ok)' : '';
   b.style.color = ok ? '#fff' : '';
   b.title = ok ? 'Connecté au collecteur — toucher pour déconnecter' : 'Se connecter au collecteur RELAY_MT';
+  // [v36] connecte : le vert du bouton suffit, le texte d'etat laisse la place aux voitures.
+  // Perdu, en recherche ou en erreur, il revient : un ennui ne doit jamais etre muet.
+  var e = document.getElementById('etat'); if (e) e.style.display = ok ? 'none' : '';
 }
 
 // ---- BLE ----
