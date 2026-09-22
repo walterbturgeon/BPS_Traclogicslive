@@ -159,7 +159,8 @@
     <div class="grille">
       <div><div class="small">Tour</div><div class="grand" id="tNum"></div><div class="small" id="tSess"></div></div>
       <div><div class="small">Temps</div><div class="grand" id="tTemps"></div></div>
-      <div><div class="small">Écart vs précédent</div><div class="grand" id="tEcart"></div></div>
+      <div id="caseEcart"><div class="small">Écart vs précédent</div><div class="grand" id="tEcart"></div></div>
+      <div id="casePotentiel" style="display:none"><div class="small">Potentiel (tour idéal)</div><div class="grand" id="tPotentiel"></div></div>
       <div><div class="small">Écart vs meilleur (session)</div><div class="grand" id="tBest"></div></div>
       <div id="meteoCase" style="display:none"><div class="small">Météo au circuit</div><div class="grand" id="tMeteo" style="font-size:1.35em"></div><div class="small" id="tMeteoSous" style="display:none"></div></div>
     </div>
@@ -208,7 +209,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v45';
+var PAGE_VER = 'MT v46';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -861,12 +862,17 @@ function rendre0() {
     if (sn.jour !== jourCourant) { jourCourant = sn.jour; hb += '<div class="jour">' + jourTexte(sn.debutMs) + '</div>'; }
     var ouverte = sessionsRepliees[sn.cle] != null ? !sessionsRepliees[sn.cle] : (sn.cle === derniere || sn.cle === vueCle);
     hb += '<details class="session" data-cle="' + sn.cle + '"' + (ouverte ? ' open' : '') + '><summary>Session ' + sn.numJour + ' <span class="small">· ' + heureTexte(sn.debutMs) + (sn.finMs > sn.debutMs ? ' – ' + heureTexte(sn.finMs) : '') + ' · ' + sn.n + ' tour' + (sn.n > 1 ? 's' : '') + (sn.best ? ' · meilleur ' + duree(sn.best.dureeMs) : '') + (sn.motif && MOTIFS[sn.motif] ? ' · ' + MOTIFS[sn.motif] : '') + '</span></summary>';
-    hb += '<table><thead><tr><th>#</th><th class="num">Temps</th><th class="num">Écart</th><th class="num">Heure</th></tr></thead><tbody>';
+    hb += '<table><thead><tr><th>#</th><th class="num">Temps</th><th class="num">Écart</th>'
+        + (smartOn ? '<th class="num">vs meilleur</th>' : '') + '<th class="num">Heure</th></tr></thead><tbody>';
     sn.laps.slice().reverse().forEach(function (l, j) {
       var prec = sn.laps[sn.laps.length - 2 - j] || null;
       hb += '<tr class="clic' + (l.num === vueTour ? ' sel' : '') + '" data-num="' + l.num + '"><td>#' + lapNumAff(l) + (sn.best && l === sn.best ? ' ★' : '')
         + (smartOn && horsAnalyse(v, l) ? ' <span class="small" style="opacity:.65">hors analyse</span>' : '') + '</td><td class="num">' + duree(l.dureeMs) + '</td><td class="num">'
-        + (prec && prec.dureeMs != null && l.dureeMs != null ? ecartTexte(l.dureeMs - prec.dureeMs) : '—') + '</td><td class="num small">'
+        + (prec && prec.dureeMs != null && l.dureeMs != null ? ecartTexte(l.dureeMs - prec.dureeMs) : '—') + '</td>'
+        + (smartOn ? '<td class="num">' + (sn.best && l.dureeMs != null && l !== sn.best
+            ? '<span style="color:' + (l.dureeMs - sn.best.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(l.dureeMs - sn.best.dureeMs) + '</span>'
+            : (l === sn.best ? '<b style="color:var(--ok)">meilleur</b>' : '—')) + '</td>' : '')
+        + '<td class="num small">'
         + (l.finUtc ? new Date(l.finUtc * 1000).toTimeString().slice(0, 8) : l.recuMs ? new Date(l.recuMs).toTimeString().slice(0, 8) + ' (reçu)' : '') + '</td></tr>';
     });
     hb += '</tbody></table></details>';
@@ -883,6 +889,9 @@ function rendre0() {
   document.getElementById('tSess').textContent = sess ? 'Session ' + sess.numJour + ' · ' + jourTexte(sess.debutMs) + (lap.debutUtc ? ' · ' + new Date(lap.debutUtc * 1000).toTimeString().slice(0, 8) : '') : '';
   document.getElementById('tTemps').textContent = duree(lap.dureeMs);
   document.getElementById('tEcart').textContent = prec && prec.dureeMs != null && lap.dureeMs != null ? ecartTexte(lap.dureeMs - prec.dureeMs) : '—';
+  document.getElementById('caseEcart').style.display = smartOn ? 'none' : '';        // [v46]
+  document.getElementById('casePotentiel').style.display = smartOn ? '' : 'none';
+  if (smartOn) { document.getElementById('tPotentiel').textContent = '—'; document.getElementById('tPotentiel').style.color = ''; }
   document.getElementById('tBest').textContent = best && lap.dureeMs != null ? (lap === best ? 'meilleur' : ecartTexte(lap.dureeMs - best.dureeMs)) : '—';
   // [v37] la meteo au circuit : la case n'existe que si une reponse est arrivee
   var mc = document.getElementById('meteoCase'), mt = lap.meteo || null;
@@ -1371,7 +1380,10 @@ function circuitRendre(v, lap) {
     var nomS = (smartOn && bornesV ? 'S' : 'P') + (i + 1);
     h += '<tr><td>' + nomS + ' <span class="small">(' + Math.round(b0) + '–' + Math.round(b1) + ' m)</span></td><td class="num"><b>' + dureeCourte(x) + '</b></td>'
       + (ref ? '<td class="num">' + (dr != null ? '<span style="color:' + (dr <= 0 ? 'var(--ok)' : 'var(--warn)') + ';font-weight:600">' + ecartTexte(dr) + '</span>' : '\u2014') + '</td>' : '')
-      + '<td class="num">' + (x != null && mb != null ? (x - mb <= 0 ? '<span style="color:var(--ok)">' : '') + ecartTexte(x - mb) + (x - mb <= 0 ? '</span>' : '') : '\u2014') + '</td><td class="small">' + (meilleurNum && meilleurNum[i] != null ? '#' + lapNumAff(v.laps[meilleurNum[i]]) : '') + '</td>'
+      + '<td class="num">' + (x != null && mb != null
+          ? (smartOn ? '<span style="color:' + (x - mb <= 100 ? 'var(--ok)' : 'var(--warn)') + ';font-weight:600">' + ecartTexte(x - mb) + '</span>'
+                     : (x - mb <= 0 ? '<span style="color:var(--ok)">' : '') + ecartTexte(x - mb) + (x - mb <= 0 ? '</span>' : ''))
+          : '\u2014') + '</td><td class="small">' + (meilleurNum && meilleurNum[i] != null ? '#' + lapNumAff(v.laps[meilleurNum[i]]) : '') + '</td>'
       + (smartOn ? '<td class="small">' + (stats && refStats ? smartCause(dr, stats[i], refStats[i]) : '') + '</td>' : '') + '</tr>';
   });
   document.getElementById('tSect').innerHTML = h;
@@ -1383,6 +1395,9 @@ function circuitRendre(v, lap) {
     var ideal = 0, complet = !!meilleurs;
     if (meilleurs) meilleurs.forEach(function (x) { if (x == null) complet = false; else ideal += x; });
     var txt = complet ? '<b>Tour idéal ' + duree(ideal) + '</b>' + (lap.dureeMs != null ? ' <span class="small">(' + ecartTexte(ideal - lap.dureeMs) + ' sur ce tour)</span>' : '') : '';
+    var cp = document.getElementById('tPotentiel');   // [v46] la case des grands chiffres
+    if (complet && lap.dureeMs != null) { cp.textContent = ecartTexte(ideal - lap.dureeMs); cp.style.color = (lap.dureeMs - ideal) > 500 ? 'var(--warn)' : 'var(--ok)'; }
+    else { cp.textContent = '—'; cp.style.color = ''; }
     if (pireI >= 0 && pire > 100) {
       var a = stats && stats[pireI], b = refStats && refStats[pireI];
       var cause = (a && b) ? smartCause(pire, a, b) : '';
