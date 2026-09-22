@@ -248,7 +248,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v61';
+var PAGE_VER = 'MT v62';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1677,17 +1677,32 @@ function circuitRendre(v, lap) {
       var a = stats && stats[pireI], b = refStats && refStats[pireI];
       var cause = (a && b) ? smartCause(pire, a, b) : '';
       var conseil = (a && meilleurStats && meilleurStats[pireI]) ? smartConseil(res.sect[pireI] - (meilleurs ? meilleurs[pireI] : res.sect[pireI]), a, meilleurStats[pireI]) : '';
-      // [v47] la bande a cote du nom : la section, l'ecart, la cause
+      // [v47] la bande a cote du nom : la section, le temps perdu, la cause
       var nomP = (bornesV ? 'S' : 'P') + (pireI + 1);
       var motBande = (cause && cause !== 'pilotage') ? cause : (conseil || 'pilotage');
-      bande.textContent = nomP + ' · ' + ecartTexte(pire) + ' · ' + motBande;
-      bande.style.background = /m\u00e9canique/.test(cause) ? 'var(--warn)' : (cause === 'lev\u00e9 de pied' ? '#c47f1b' : 'var(--accent)');
+      bande.textContent = nomP + ' · perd ' + (pire / 1000).toFixed(2).replace('.', ',') + ' s · ' + motBande;
+      bande.style.background = /m\u00e9canique/.test(cause) ? 'var(--warn)' : (cause === 'lev\u00e9 de pied' ? '#c47f1b' : '#8a6d1f');
       bande.style.display = '';
-      txt += (txt ? ' · ' : '') + '<b>' + ((bornesV ? 'S' : 'P') + (pireI + 1)) + '</b> te coûte <b>' + ecartTexte(pire) + '</b>'
+      txt += (txt ? ' · ' : '') + '<b>' + ((bornesV ? 'S' : 'P') + (pireI + 1)) + '</b> fait <b>perdre ' + (pire / 1000).toFixed(2).replace('.', ',') + ' s</b>'
            + (cause && cause !== 'pilotage' ? ' · ' + cause : (conseil ? ' · ' + conseil : ''))
            + (a && b && a.kmhMin != null && b.kmhMin != null ? ' · mini ' + Math.round(a.kmhMin) + ' contre ' + Math.round(b.kmhMin) + ' km/h' : '');
     }
     smartTemps(v, lap).forEach(function (t) { txt += (txt ? ' · ' : '') + '<b style="color:var(--warn)">' + t + '</b>'; });   // [v50]
+    if (bande.style.display === 'none' && meilleurs && stats) {   // [v62] rien de perdu : on dit le gain
+      var meilleureI = -1, gainMax = 0;
+      res.sect.forEach(function (x, i) {
+        var mb2 = meilleurs[i];
+        if (x != null && mb2 != null && x - mb2 <= gainMax) { gainMax = x - mb2; meilleureI = i; }
+      });
+      if (meilleureI >= 0) {
+        var nomG = (bornesV ? 'S' : 'P') + (meilleureI + 1);
+        var conseilG = meilleurStats && meilleurStats[meilleureI] ? smartConseil(gainMax, stats[meilleureI], meilleurStats[meilleureI]) : '';
+        bande.textContent = gainMax < -100 ? nomG + ' · gagne ' + (-gainMax / 1000).toFixed(2).replace('.', ',') + ' s' + (conseilG ? ' · ' + conseilG : '')
+                                           : 'tour au niveau du meilleur de la journée';
+        bande.style.background = 'var(--ok)';
+        bande.style.display = '';
+      }
+    }
     var hs = horsAnalyse(v, lap);
     if (hs) txt += (txt ? ' · ' : '') + '<span class="small">ce tour est hors analyse (' + hs + ')</span>';
     ph.innerHTML = txt || '<span class="small">Pas encore assez de tours comparables pour une analyse.</span>';
