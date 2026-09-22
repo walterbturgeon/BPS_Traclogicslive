@@ -71,6 +71,7 @@
   .deux { margin:0 16px; }
   @media (min-width:900px) {
     .deux { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr); gap:12px; align-items:start; }
+    #valeursCard { grid-column:1; }   /* [v59] sous la carte, dans la colonne de gauche */
     .deux .listeTours { max-height:calc(100vh - 150px); overflow:auto; }
   }
   .btn.icone { padding:8px; min-width:38px; line-height:1; font-size:1.05em; }
@@ -204,8 +205,6 @@
     </div>
     <div class="small" id="tSrc" style="margin-top:6px"></div>
     <div class="row" style="margin-top:8px"><label class="small">Comparer à <select id="compSel" onchange="compChoisir()"><option value="meilleur">meilleur tour de la session</option><option value="jour">meilleur tour de la journée</option><option value="precedent">tour précédent</option><option value="aucun">rien (vitesse)</option></select></label> <span class="small" id="compInfo"></span></div>
-    <div class="row" style="margin-top:10px"><label class="small"><input type="checkbox" id="valOn" checked onchange="valeursBascule()"> Valeurs du tour (p1 à p8)</label></div>
-    <table id="tVals" style="margin-top:4px"></table>
     <div id="circBloc" style="margin-top:12px;display:none">
       <div class="row" style="justify-content:space-between">
         <label class="small"><input type="checkbox" id="partOn" checked onchange="partiellesBascule()"> Partielles</label>
@@ -232,6 +231,11 @@
     <div class="small" style="letter-spacing:.08em;margin-bottom:6px">TOURS</div>
     <div id="toursBloc" class="listeTours"></div>
   </div>
+
+  <div class="card" id="valeursCard" style="display:none">
+    <div class="row"><label class="small"><input type="checkbox" id="valOn" checked onchange="valeursBascule()"> Valeurs du tour (p1 à p8)</label></div>
+    <table id="tVals" style="margin-top:4px"></table>
+  </div>
   </div>
 </div>
 
@@ -247,7 +251,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v58';
+var PAGE_VER = 'MT v59';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1142,6 +1146,7 @@ function rendre0() {
   bloc.querySelectorAll('details.session').forEach(function (d) { d.querySelector('summary').onclick = function () { sessionsRepliees[d.getAttribute('data-cle')] = d.open; }; });   // au clic : l'etat d'avant = ce que le doigt replie
   var lap = vueLap;
   document.getElementById('tourCard').style.display = lap ? '' : 'none';
+  document.getElementById('valeursCard').style.display = lap ? '' : 'none';   // [v59]
   if (!lap) return;
   var laps = lapsSession(v, lap), sess = sessionDe(v, lap), best = sess ? sess.best : null;
   var i = laps.indexOf(lap), prec = i > 0 ? laps[i - 1] : null;
