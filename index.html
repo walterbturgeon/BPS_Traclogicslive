@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TRACKLOGICS MT</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-mt-192.png" type="image/png"><link rel="apple-touch-icon" href="icon-mt-192.png">
+<meta name="theme-color" content="#111111">
+<style>
+  :root { --bg:#f7f7f7; --card:#fff; --ink:#111; --muted:#666; --line:#e2e2e2; --ok:#1c8f4a; --warn:#c0392b; --accent:#0a66c2; --tab:#eee; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#14171c; --card:#1d2128; --ink:#eee; --muted:#9aa; --line:#2c323b; --tab:#262b33; } }
+  :root[data-theme="dark"] { --bg:#14171c; --card:#1d2128; --ink:#eee; --muted:#9aa; --line:#2c323b; --tab:#262b33; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:16px; }
+  header { padding:12px 16px 8px; display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
+  header h1 { font-size:1.15em; margin:0; letter-spacing:.04em; }
+  header .ver { color:var(--muted); font-size:.85em; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; margin:0 16px 12px; padding:12px 14px; }
+  .btn { background:var(--ink); color:var(--bg); border:0; border-radius:10px; padding:10px 16px; font-size:1em; cursor:pointer; }
+  .btn.sec { background:var(--tab); color:var(--ink); }
+  .btn.warn { background:var(--warn); color:#fff; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .small { color:var(--muted); font-size:.85em; }
+  .tabs { display:flex; gap:6px; margin:0 16px 12px; flex-wrap:wrap; }
+  .tab { background:var(--tab); border:1px solid var(--line); border-radius:10px; padding:8px 14px; cursor:pointer; min-width:120px; }
+  .tab.on { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  .tab .nom { font-weight:600; }
+  .tab .sub { font-size:.75em; opacity:.75; }
+  .tab .portee { display:inline-block; width:9px; height:9px; border-radius:50%; background:#999; margin-right:6px; }
+  .tab .portee.ok { background:var(--ok); }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { font-weight:600; color:var(--muted); font-size:.85em; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr.sel td { background:rgba(10,102,194,.12); }
+  tr.clic { cursor:pointer; }
+  .jour { font-weight:600; margin:14px 0 4px; padding-bottom:4px; border-bottom:2px solid var(--line); }
+  details.session { margin:6px 0; border:1px solid var(--line); border-radius:8px; padding:4px 8px; }
+  details.session summary { color:inherit; font-weight:600; padding:4px 0; }
+  details.session summary .small { font-weight:400; }
+  .grand { font-size:2em; font-weight:600; font-variant-numeric:tabular-nums; }
+  .grille { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  canvas { width:100%; border-radius:10px; display:block; background:#fafafa; }
+  @media (prefers-color-scheme: dark) { canvas { background:#11151a; } }
+  .jrn { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.78em; white-space:pre-wrap; max-height:200px; overflow:auto; color:var(--muted); }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.8em; background:var(--tab); }
+  .badge.ok { background:var(--ok); color:#fff; }
+  .badge.warn { background:var(--warn); color:#fff; }
+  details summary { cursor:pointer; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>TRACKLOGICS — tour à tour</h1>
+  <span class="ver" id="pageVer">page MT v1</span>
+  <span class="badge" id="majBadge" style="display:none">mise à jour…</span>
+</header>
+
+<div class="card">
+  <div class="row">
+    <button class="btn" id="btnConn" onclick="connecter()">Connecter le collecteur</button>
+    <span id="etat" class="small">Pas connecté.</span>
+  </div>
+  <div class="small" id="collInfo" style="margin-top:6px"></div>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
+<div id="vide" class="card small">Aucune voiture encore. Connecte le collecteur (RELAY_MT) : les voitures apparaissent à leur premier battement ou à leur premier tour.</div>
+
+<div id="voiture" style="display:none">
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div><span class="grand" id="vNom"></span> <span class="small" id="vSub"></span></div>
+      <div class="row">
+        <button class="btn sec" onclick="ligneRefaire()">Refaire la ligne</button>
+        <button class="btn sec" onclick="toursEffacer()">Effacer les tours</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="tourCard" style="display:none">
+    <div class="grille">
+      <div><div class="small">Tour</div><div class="grand" id="tNum"></div><div class="small" id="tSess"></div></div>
+      <div><div class="small">Temps</div><div class="grand" id="tTemps"></div></div>
+      <div><div class="small">Écart vs précédent</div><div class="grand" id="tEcart"></div></div>
+      <div><div class="small">Écart vs meilleur (session)</div><div class="grand" id="tBest"></div></div>
+    </div>
+    <div class="small" id="tSrc" style="margin-top:6px"></div>
+    <div class="row" style="margin-top:8px"><label class="small">Comparer à <select id="compSel" onchange="compChoisir()"><option value="meilleur">meilleur tour de la session</option><option value="jour">meilleur tour de la journée</option><option value="precedent">tour précédent</option><option value="aucun">rien (vitesse)</option></select></label> <span class="small" id="compInfo"></span></div>
+    <div class="row" style="margin-top:10px"><label class="small"><input type="checkbox" id="valOn" checked onchange="valeursBascule()"> Valeurs du tour (p1 à p8)</label></div>
+    <table id="tVals" style="margin-top:4px"></table>
+    <div id="circBloc" style="margin-top:12px;display:none">
+      <div class="row" style="justify-content:space-between">
+        <div><b id="circNom"></b> <span class="small" id="circInfo"></span></div>
+        <label class="small"><input type="checkbox" id="partOn" checked onchange="partiellesBascule()"> Partielles</label>
+        <label class="small" id="circNLabel"><select id="circN" onchange="secteursChoisir()"><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></label>
+      </div>
+      <div id="partBloc"><table id="tSect" style="margin-top:6px"></table>
+      <div class="small" id="circNote"></div></div>
+    </div>
+    <div class="row" style="margin:10px 0 6px">
+      <label class="small"><input type="checkbox" id="satOn" onchange="satBascule()"> Fond satellite</label>
+      <label class="small"><input type="radio" name="orient" value="max" onchange="orientChoisir('max')"> Maximiser le tracé</label>
+      <label class="small"><input type="radio" name="orient" value="nord" onchange="orientChoisir('nord')"> Nord en haut</label>
+      <button class="btn sec" style="padding:4px 10px;background:var(--ok);color:#fff" id="btnVerrou" onclick="verrouBascule()">🔒 Vue verrouillée</button>
+      <button class="btn sec" style="padding:4px 10px" onclick="carteRecadrer()">Recadrer</button>
+      <span class="small" id="satEtat"></span>
+    </div>
+    <canvas id="carte" height="10" style="touch-action:none"></canvas>
+    <div class="small" id="carteLeg"></div>
+    <div class="small">Vue libre : un doigt déplace, deux doigts zooment et tournent, double toucher recadre. Vue verrouillée : un doigt sur le tracé montre la vitesse à ce point.</div>
+  </div>
+
+  <div class="card">
+    <div class="small" style="letter-spacing:.08em;margin-bottom:6px">TOURS</div>
+    <div id="toursBloc"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row"><button class="btn sec" id="btnDetails" onclick="detailsBascule()">Détails</button><span class="small">Numéros de série (MAC) et versions des boîtes.</span></div>
+  <div class="row" style="margin-top:8px"><button class="btn sec" onclick="sauvegarder()">Sauvegarder (fichier)</button><button class="btn sec" onclick="document.getElementById('fichierRestaure').click()">Restaurer</button><input type="file" id="fichierRestaure" accept=".json,application/json" style="display:none" onchange="restaurer(this.files[0]); this.value=''"></div>
+  <div class="small" id="memEtat" style="margin-top:6px"></div>
+</div>
+
+<div class="card">
+  <details>
+    <summary>Journal de diagnostic</summary>
+    <div class="row" style="margin:8px 0"><button class="btn sec" onclick="toursCsv()">Exporter les tours (CSV)</button><button class="btn sec" onclick="traceCsv()">Exporter la trace du tour (CSV)</button></div>
+    <div class="row" style="margin:8px 0"><button class="btn sec" onclick="jrnPartager()">Télécharger le journal</button><button class="btn sec" onclick="jrnEffacer()">Effacer</button></div>
+    <div class="jrn" id="jrn"></div>
+  </details>
+</div>
+
+<script>
+// =====================================================================
+// TRACKLOGICS MT -- la page « tour a tour » de Mont-Tremblant (sept. 2026)
+// =====================================================================
+// Une page NEUVE, a cote de la page fusion v56 (le jalon, intouche).
+// Elle parle au COLLECTEUR (TRLG_Collecteur_MT, nom BLE RELAY_MT), qui
+// enveloppe chaque paquet d'un DLPT2 : [0x11][indice voiture][paquet].
+// Un onglet par voiture, nomme par le nom BLE de la boite (identite 0x09) ;
+// le numero de serie (MAC) en sous-texte. Tout est range par MAC.
+// Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
+// le module envoie), sa trace, sa carte.
+var PAGE_VER = 'MT v22';
+// [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
+// meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
+// n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
+// plus vite que la reference, rouge : moins vite, gris : pareil). Dans les
+// partielles, une colonne donne l'ecart de temps par section vs la reference, et
+// une ligne resume ou l'on gagne et ou l'on perd. « Le meme endroit » = la meme
+// distance parcourue depuis la ligne, ce qui marche avec ou sans circuit reconnu.
+var compMode = 'meilleur';   // 'aucun' | 'meilleur' | 'precedent'
+var compRef = null;          // le tour de reference du rendu courant, ou null
+function compChoisir() { compMode = document.getElementById('compSel').value; try { localStorage.setItem('mt_comp', compMode); } catch (e) {} rendre(); }
+function compReference(v, lap) {
+  if (compMode === 'aucun') return null;
+  var laps = (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap)).filter(function (l) { return l.dureeMs != null && traceEntiere(v.traces[l.num]).length >= 10; });   // [v21] dans la session
+  var i = laps.indexOf(lap);
+  if (compMode === 'precedent') { for (var k = (i >= 0 ? i : laps.length) - 1; k >= 0; k--) if (laps[k] !== lap) return laps[k]; return null; }
+  var best = null; laps.forEach(function (l) { if (l !== lap && (!best || l.dureeMs < best.dureeMs)) best = l; });
+  return best;
+}
+// la distance cumulee de chaque point d'une trace
+function distCumul(pts) { var d = [0]; for (var i = 1; i < pts.length; i++) d.push(d[i - 1] + Math.hypot(pts[i].dx - pts[i - 1].dx, pts[i].dy - pts[i - 1].dy)); return d; }
+// la vitesse de la reference a une distance donnee (interpolation lineaire)
+function vitesseA(ptsRef, dRef, d) {
+  if (d <= 0) return ptsRef[0].kmh; var n = dRef.length; if (d >= dRef[n - 1]) return ptsRef[n - 1].kmh;
+  var lo = 0, hi = n - 1; while (hi - lo > 1) { var m = (lo + hi) >> 1; if (dRef[m] <= d) lo = m; else hi = m; }
+  var f = (d - dRef[lo]) / Math.max(dRef[hi] - dRef[lo], 1e-6); return ptsRef[lo].kmh + f * (ptsRef[hi].kmh - ptsRef[lo].kmh);
+}
+function couleurDelta(dv) {   // -10..+10 km/h -> rouge..gris..vert
+  var u = Math.max(-1, Math.min(1, dv / 10)), a = Math.abs(u);
+  if (a < 0.08) return 'rgb(190,190,190)';
+  return u > 0 ? 'hsl(140, 85%, ' + (60 - 25 * a) + '%)' : 'hsl(0, 85%, ' + (62 - 22 * a) + '%)';
+}
+// [v14] l'interrupteur des 4 valeurs (p1..p4) du tour
+var valeursOn = true;
+function valeursBascule() { valeursOn = document.getElementById('valOn').checked; try { localStorage.setItem('mt_val', valeursOn ? '1' : '0'); } catch (e) {} rendre(); }
+// [v11] l'interrupteur des partielles : les montrer (tableau + bornes sur la carte) ou non
+var partiellesOn = true;
+function partiellesBascule() { partiellesOn = document.getElementById('partOn').checked; try { localStorage.setItem('mt_part', partiellesOn ? '1' : '0'); } catch (e) {} rendre(); }
+// [v8] les details techniques (MAC, firmware) sont masques par defaut ; le bouton en bas de page les montre
+var details = false;
+function detailsBascule() { details = !details; try { localStorage.setItem('mt_details', details ? '1' : '0'); } catch (e) {} document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails'; rendre(); }
+var RL_SVC = 'b3d5a900-1a2b-4c3d-9e0f-56789abcdef0';
+var RL_DATA = 'b3d5a901-1a2b-4c3d-9e0f-56789abcdef0';
+var RL_CMD = 'b3d5a902-1a2b-4c3d-9e0f-56789abcdef0';
+var ENV = 0x11;
+var NB_CANAUX = 38;      // le resume 0x01 porte 38 canaux Link (min, max, moy en int16)
+
+// ---- l'etat ----
+var voitures = {};        // mac -> {mac, idx, nom, num, fw, vuMs, laps:{num->lap}, traces:{num->{parts,nb}}, ordre:[]}
+var ordreVoitures = [];   // les MAC dans l'ordre d'apparition
+var idxVersMac = {};      // indice du collecteur -> MAC (appris par l'identite 0x09)
+var vueMac = null;        // l'onglet ouvert
+var vueTour = null;       // le tour affiche
+var device = null, cmdChar = null, dataChar = null, connecte = false;
+var satVoulu = false, satImg = null, satCle = '';
+var proj = null;
+
+// ---- journal ----
+var jrnLignes = [];
+function jrn(t) {
+  var d = new Date(); var h = d.toTimeString().slice(0, 8);
+  jrnLignes.push(h + ' ' + t); if (jrnLignes.length > 400) jrnLignes.shift();
+  var e = document.getElementById('jrn'); if (e) { e.textContent = jrnLignes.join('\n'); e.scrollTop = e.scrollHeight; }
+}
+function jrnEffacer() { jrnLignes = []; jrn('Journal efface.'); }
+function jrnPartager() {
+  var corps = 'TRACKLOGICS MT -- journal\n' + new Date().toString() + '\npage ' + PAGE_VER + '\n\n';
+  ordreVoitures.forEach(function (m) { var v = voitures[m]; corps += 'voiture ' + v.nom + ' ' + m + ' num=' + v.num + ' fw=' + v.fw + ' tours=' + Object.keys(v.laps).length + '\n'; });
+  corps += '\n' + jrnLignes.join('\n') + '\n';
+  var b = new Blob([corps], { type: 'text/plain' }); var a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = 'tracklogics_mt_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.txt'; a.click();
+}
+function etat(t) { document.getElementById('etat').textContent = t; jrn(t); }
+
+// ---- BLE ----
+async function connecter() {
+  if (!navigator.bluetooth) { etat('Ce navigateur ne fait pas le Bluetooth Web.'); return; }
+  if (connecte && device) { try { device.gatt.disconnect(); } catch (e) {} return; }
+  try {
+    etat('Recherche du collecteur...');
+    device = await navigator.bluetooth.requestDevice({ filters: [{ services: [RL_SVC] }], optionalServices: [RL_SVC] });
+    device.addEventListener('gattserverdisconnected', function () {
+      connecte = false; cmdChar = null;
+      document.getElementById('btnConn').textContent = 'Connecter le collecteur';
+      etat('Collecteur deconnecte. Reconnexion dans 3 s...');
+      setTimeout(reconnecter, 3000);
+    });
+    var srv = await device.gatt.connect();
+    await attacher(srv);
+  } catch (e) { etat('Erreur : ' + e.message); }
+}
+async function reconnecter() {
+  if (!device || connecte) return;
+  try { var srv = await device.gatt.connect(); await attacher(srv); }
+  catch (e) { etat('Reconnexion ratee (' + e.message + '), nouvel essai dans 5 s'); setTimeout(reconnecter, 5000); }
+}
+async function attacher(server) {
+  var svc = await server.getPrimaryService(RL_SVC);
+  var ch = await svc.getCharacteristic(RL_DATA);
+  await ch.startNotifications();
+  if (dataChar) { try { dataChar.removeEventListener('characteristicvaluechanged', notif); } catch (e) {} }
+  dataChar = ch; ch.addEventListener('characteristicvaluechanged', notif);
+  cmdChar = await svc.getCharacteristic(RL_CMD);
+  connecte = true;
+  document.getElementById('btnConn').textContent = 'Deconnecter';
+  var nom = device.name || '?';
+  etat('Connecte a ' + nom + '. Le collecteur renvoie ce qu’il garde...');
+  try {
+    var v = await ch.readValue(); var b = new Uint8Array(v.buffer);
+    if (b[0] === 0x10) { var fw = new TextDecoder().decode(b.slice(1)); document.getElementById('collInfo').textContent = 'Collecteur : ' + fw; jrn('Collecteur ' + fw); }
+  } catch (e) {}
+}
+async function envoyerCmd(mac, octets) {
+  if (!cmdChar) { etat('Le collecteur n’est pas connecte : la commande ne peut pas partir.'); return false; }
+  var v = voitures[mac]; if (!v || v.idx == null) { etat('Voiture sans indice au collecteur : commande impossible.'); return false; }
+  var b = new Uint8Array(2 + octets.length); b[0] = ENV; b[1] = v.idx; b.set(octets, 2);
+  try { await cmdChar.writeValue(b); return true; } catch (e) { etat('Commande non partie : ' + e.message); return false; }
+}
+
+// ---- reception ----
+function notif(ev) {
+  var b = new Uint8Array(ev.target.value.buffer);
+  if (b.length < 4 || b[0] !== ENV) { jrn('Paquet hors enveloppe ignore (type 0x' + (b[0] || 0).toString(16) + ', ' + b.length + ' o)'); return; }
+  var idx = b[1], p = b.subarray(2);
+  if (p[0] === 0x09) { decodeIdent(idx, p); return; }
+  var mac = idxVersMac[idx];
+  if (!mac) { jrn('Tour recu pour l’indice ' + idx + ' avant son identite : en attente'); enAttente.push({ idx: idx, p: new Uint8Array(p) }); return; }
+  traiter(mac, p);
+}
+var enAttente = [];
+function traiter(mac, p) {
+  var v = voitures[mac]; v.vuMs = Date.now();
+  if (p[0] === 0x01) decodeTour(v, p);
+  else if (p[0] === 0x08) decodeValeurs(v, p);
+  else if (p[0] === 0x02) decodeTrace(v, p);
+  else if (p[0] === 0x0A) decodeCanaux(v, p);      // [v20] 8 canaux a 1 Hz (PT2.1.37)
+  else if (p[0] === 0x0B) decodeCatalogue(v, p);   // [v20] libelles, unites, echelles de p1..p8
+  else jrn('Type inconnu 0x' + p[0].toString(16) + ' pour ' + v.nom);
+  marquer(mac, p.length >= 3 ? (p[1] | (p[2] << 8)) : null);   // [v22]
+  sauver(); rendre();
+}
+function macTexte(a) { var s = []; for (var i = 0; i < 6; i++) s.push(('0' + a[i].toString(16)).slice(-2).toUpperCase()); return s.join(':'); }
+function voitureOuvrir(mac) {
+  if (!voitures[mac]) {
+    voitures[mac] = { mac: mac, idx: null, nom: 'CAR' + mac.slice(-5).replace(':', ''), num: 0, fw: '', vuMs: 0, laps: {}, traces: {} };
+    ordreVoitures.push(mac);
+    if (!vueMac) vueMac = mac;
+    jrn('Nouvelle voiture ' + mac);
+  }
+  return voitures[mac];
+}
+function decodeIdent(idx, p) {
+  if (p.length < 30) return;
+  var mac = macTexte(p.subarray(1, 7));
+  var v = voitureOuvrir(mac);
+  var nomNeuf = new TextDecoder().decode(p.subarray(8, 16)).replace(/\0+$/, '');
+  if (v.nom !== nomNeuf) jrn('Voiture ' + mac + ' se nomme ' + nomNeuf);
+  v.idx = idx; v.nom = nomNeuf || v.nom; v.num = p[7]; v.fw = new TextDecoder().decode(p.subarray(16, 28)).replace(/\0+$/, ''); v.vuMs = Date.now();
+  idxVersMac[idx] = mac;
+  // ce qui attendait cette identite
+  var reste = [];
+  enAttente.forEach(function (a) { if (a.idx === idx) traiter(mac, a.p); else reste.push(a); });
+  enAttente = reste;
+  marquer(mac, null);   // [v22]
+  sauver(); rendre();
+}
+function decodeTour(v, b) {
+  if (b.length < 8 + NB_CANAUX * 6 + 2) { jrn('Resume tronque (' + b.length + ' o) pour ' + v.nom); return; }
+  var dv = new DataView(b.buffer, b.byteOffset);
+  var num = dv.getUint16(1, true);
+  var lap = v.laps[num] || { num: num };
+  lap.dureeMs = dv.getUint32(3, true); lap.source = dv.getUint8(7);
+  var vals = [], off = 8;
+  for (var i = 0; i < NB_CANAUX; i++) { vals.push({ min: dv.getInt16(off, true), max: dv.getInt16(off + 2, true), avg: dv.getInt16(off + 4, true) }); off += 6; }
+  lap.vals = vals; lap.flags = dv.getUint16(off, true); off += 2;
+  if (b.length >= off + 10) { lap.oLat = dv.getInt32(off, true) / 1e7; lap.oLon = dv.getInt32(off + 4, true) / 1e7; lap.dMax = dv.getUint16(off + 8, true); }
+  if (!lap.recuMs) lap.recuMs = Date.now();
+  v.laps[num] = lap;
+  if (vueMac === v.mac) vueTour = num;
+  jrn(v.nom + ' : tour #' + lapNumAff(lap) + (num >= 200 ? ' (session ' + Math.floor(num / 200) + ')' : '') + ' ' + duree(lap.dureeMs));
+}
+function decodeValeurs(v, b) {
+  if (b.length < 60) return;
+  var dv = new DataView(b.buffer, b.byteOffset);
+  var num = dv.getUint16(1, true);
+  var pv = { lect: dv.getUint8(3), items: [] };
+  for (var k = 0; k < 4; k++) {
+    var it = { idx: dv.getUint8(4 + k), min: dv.getFloat32(8 + k * 12, true), max: dv.getFloat32(12 + k * 12, true), moy: dv.getFloat32(16 + k * 12, true), n: dv.getUint8(56 + k), nom: '', unite: '' };
+    if (b.length >= 164) {   // [PT2.1.31] les libelles suivent
+      it.nom = new TextDecoder().decode(b.subarray(60 + k * 26, 80 + k * 26)).replace(/\0.*$/, '');
+      it.unite = new TextDecoder().decode(b.subarray(80 + k * 26, 86 + k * 26)).replace(/\0.*$/, '');
+    }
+    pv.items.push(it);
+  }
+  var lap = v.laps[num] || { num: num, recuMs: Date.now() };
+  lap.pv = pv; v.laps[num] = lap;
+}
+function decodeTrace(v, b) {
+  if (b.length < 16) return;
+  var dv = new DataView(b.buffer, b.byteOffset);
+  var num = dv.getUint16(1, true), idx = b[3], nb = b[4], npts = b[5];
+  var t = v.traces[num] || { parts: [], nb: nb }; t.nb = nb; t.intervalMs = dv.getUint16(6, true);   // [v10] pour les partielles
+  var pts = [], off = 16;
+  for (var i = 0; i < npts && off + 5 <= b.length; i++) { pts.push({ dx: dv.getInt16(off, true), dy: dv.getInt16(off + 2, true), kmh: b[off + 4] }); off += 5; }
+  t.parts[idx] = pts; v.traces[num] = t;
+}
+function traceEntiere(t) { if (!t) return []; var out = []; for (var i = 0; i < t.nb; i++) if (t.parts[i]) out = out.concat(t.parts[i]); return out; }
+// [v20] LES 8 CANAUX A 1 Hz (PT2.1.37). 0x0B = le catalogue (2 parties de 4 canaux : indice, echelle
+// div/off, nom, unite). 0x0A = les echantillons : par seconde de tour, un masque de presence puis
+// p1..p8 sur un octet ; valeur = octet x div + off. L'echantillon k est a t = k s depuis le depart
+// du tour, sur la meme grille que la trace : sa position vient de la trace, par le temps.
+function decodeCatalogue(v, b) {
+  if (b.length < 145) { jrn('Catalogue tronque (' + b.length + ' o) pour ' + v.nom); return; }
+  var dv = new DataView(b.buffer, b.byteOffset), num = dv.getUint16(1, true), part = b[3];
+  if (part > 1) return;
+  var lap = v.laps[num] || { num: num, recuMs: Date.now() };
+  var cat = lap.cat || { lect: b[4], ch: [] }; cat.lect = b[4];
+  for (var k = 0; k < 4; k++) {
+    var idx = b[5 + k];
+    cat.ch[4 * part + k] = idx === 255 ? null : { idx: idx, div: dv.getFloat32(9 + k * 8, true), off: dv.getFloat32(13 + k * 8, true),
+      nom: new TextDecoder().decode(b.subarray(41 + k * 26, 61 + k * 26)).replace(/\0.*$/, ''), unite: new TextDecoder().decode(b.subarray(61 + k * 26, 67 + k * 26)).replace(/\0.*$/, '') };
+  }
+  if (part === 0 && b.length >= 158) {   // [v21] PT2.1.39 : UTC de la session, du debut et de la fin du tour, motif
+    var su = dv.getUint32(145, true), du = dv.getUint32(149, true), fu = dv.getUint32(153, true);
+    if (su) lap.sessionUtc = su; if (du) lap.debutUtc = du; if (fu) lap.finUtc = fu; lap.motif = b[157];
+  }
+  lap.cat = cat; v.laps[num] = lap;
+}
+function decodeCanaux(v, b) {
+  if (b.length < 10) return;
+  var dv = new DataView(b.buffer, b.byteOffset), num = dv.getUint16(1, true), part = b[3], nb = b[4], n = b[5], s0 = dv.getUint16(6, true);
+  if (b.length < 10 + 9 * n) { jrn('Canaux tronques (' + b.length + ' o, ' + n + ' s) pour ' + v.nom); return; }
+  var lap = v.laps[num] || { num: num, recuMs: Date.now() };
+  var can = lap.can || { nb: nb, parts: {} }; can.nb = nb;
+  var rows = [];
+  for (var i = 0; i < n; i++) { var o = 10 + i * 9, r = [b[o]]; for (var k = 0; k < 8; k++) r.push(b[o + 1 + k]); rows.push(r); }
+  can.parts[part] = { s0: s0, rows: rows };
+  lap.can = can; v.laps[num] = lap;
+}
+// les echantillons d'un tour : tableau indexe par la seconde, [masque, p1..p8] ou undefined
+function canEchantillons(lap) {
+  if (!lap || !lap.can) return [];
+  var out = [];
+  Object.keys(lap.can.parts).forEach(function (p) { var q = lap.can.parts[p]; q.rows.forEach(function (r, i) { out[q.s0 + i] = r; }); });
+  return out;
+}
+// la valeur reelle du canal k a la seconde s (null si absente)
+function canValeur(lap, ech, k, sec) {
+  var r = ech[sec]; if (!r || !(r[0] & (1 << k))) return null;
+  var c = lap.cat && lap.cat.ch[k]; return c ? r[1 + k] * c.div + c.off : r[1 + k];
+}
+// min / moyenne / max / n / seconde du max d'un canal sur le tour
+function canResume(lap, ech, k) {
+  var mn = null, mx = null, som = 0, n = 0, sMax = -1;
+  for (var sec = 0; sec < ech.length; sec++) { var x = canValeur(lap, ech, k, sec); if (x == null) continue; if (mn == null || x < mn) mn = x; if (mx == null || x > mx) { mx = x; sMax = sec; } som += x; n++; }
+  return n ? { min: mn, max: mx, moy: som / n, n: n, sMax: sMax } : null;
+}
+// la position sur la trace a l'instant t (ms depuis le depart), par interpolation
+function positionA(pts, intervalMs, tMs) {
+  if (!pts.length || !intervalMs) return null;
+  var f = tMs / intervalMs, i = Math.floor(f); if (i < 0) return pts[0]; if (i >= pts.length - 1) return pts[pts.length - 1];
+  var a = pts[i], b = pts[i + 1], u = f - i; return { dx: a.dx + u * (b.dx - a.dx), dy: a.dy + u * (b.dy - a.dy) };
+}
+var CAN_COULEURS = ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#00c7be', '#007aff', '#af52de', '#ff2d55'];
+
+// ---- memoire locale : la page rechargee garde ses tours ----
+// [v22] LA VRAIE MEMOIRE. localStorage plafonne a ~5 Mo (un tour avec trace et 8 canaux = 10-15 ko : une
+// journee a 3 voitures y tenait a peine) et le navigateur peut l'effacer. IndexedDB : des centaines de Mo,
+// un enregistrement par tour (cle voiture|numero) et un par voiture ; navigator.storage.persist() demande
+// au navigateur de ne jamais evincer (accorde d'office a une PWA installee). Sauvegarde/restauration en
+// fichier .json pour la copie hors tablette. L'ancien localStorage est importe une fois, puis retire.
+var db = null, dbSales = {}, dbVoituresSales = {}, dbMinuterie = null, dbEcrits = 0, dbErreurs = 0;
+function dbOuvrir() {
+  return new Promise(function (res, rej) {
+    if (!window.indexedDB) { rej(new Error('IndexedDB absente')); return; }
+    var r = indexedDB.open('trlg_mt', 1);
+    r.onupgradeneeded = function (e) { var d = e.target.result; if (!d.objectStoreNames.contains('voitures')) d.createObjectStore('voitures', { keyPath: 'mac' }); if (!d.objectStoreNames.contains('tours')) d.createObjectStore('tours', { keyPath: 'cle' }); };
+    r.onsuccess = function (e) { db = e.target.result; res(db); };
+    r.onerror = function () { rej(r.error); };
+  });
+}
+function marquer(mac, num) { if (num != null) dbSales[mac + '|' + num] = true; dbVoituresSales[mac] = true; }
+function sauver() {   // regroupe les ecritures : au plus une rafale par 300 ms
+  if (dbMinuterie) return; dbMinuterie = setTimeout(sauverMaintenant, 300);
+}
+function sauverMaintenant() {
+  dbMinuterie = null;
+  if (!db) { try { localStorage.setItem('mt_voitures', JSON.stringify({ ordre: ordreVoitures, voitures: voitures })); } catch (e) {} return; }   // secours : la base n'est pas ouverte
+  var tx = db.transaction(['voitures', 'tours'], 'readwrite'), sv = tx.objectStore('voitures'), st = tx.objectStore('tours');
+  Object.keys(dbVoituresSales).forEach(function (m) { var v = voitures[m]; if (!v) return; sv.put({ mac: m, nom: v.nom, num: v.num, fw: v.fw, vuMs: v.vuMs, ordre: ordreVoitures.indexOf(m) }); });
+  Object.keys(dbSales).forEach(function (k) { var i = k.lastIndexOf('|'), m = k.slice(0, i), n = +k.slice(i + 1), v = voitures[m]; if (!v) return; if (!v.laps[n] && !v.traces[n]) { st.delete(k); return; } st.put({ cle: k, mac: m, num: n, lap: v.laps[n] || null, trace: v.traces[n] || null }); dbEcrits++; });
+  dbSales = {}; dbVoituresSales = {};
+  tx.onerror = function () { dbErreurs++; jrn('\u26a0 Ecriture en memoire refusee : ' + (tx.error && tx.error.name)); };
+}
+function dbEffacerVoiture(mac) {
+  if (!db) return; var tx = db.transaction('tours', 'readwrite'), st = tx.objectStore('tours');
+  st.delete(IDBKeyRange.bound(mac + '|', mac + '|\uffff'));
+}
+function dbLireTout() {
+  return new Promise(function (res) {
+    var tx = db.transaction(['voitures', 'tours'], 'readonly'), vs = [], ts = [];
+    tx.objectStore('voitures').getAll().onsuccess = function (e) { vs = e.target.result || []; };
+    tx.objectStore('tours').getAll().onsuccess = function (e) { ts = e.target.result || []; };
+    tx.oncomplete = function () { res({ voitures: vs, tours: ts }); };
+    tx.onerror = function () { res({ voitures: [], tours: [] }); };
+  });
+}
+function memoireEtat() {
+  var e = document.getElementById('memEtat'); if (!e) return;
+  var n = 0; Object.keys(voitures).forEach(function (m) { n += Object.keys(voitures[m].laps).length; });
+  var txt = (db ? 'IndexedDB' : 'localStorage (secours)') + ' · ' + n + ' tour' + (n > 1 ? 's' : '') + ' · ' + Object.keys(voitures).length + ' voiture' + (Object.keys(voitures).length > 1 ? 's' : '');
+  if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(function (q) { var p2 = navigator.storage.persisted ? navigator.storage.persisted() : Promise.resolve(false); p2.then(function (ok) { e.textContent = txt + ' · ' + (q.usage / 1048576).toFixed(1) + ' Mo utilises sur ' + Math.round(q.quota / 1048576) + ' · ' + (ok ? 'persistante (le navigateur ne l\u2019efface pas)' : 'au mieux : installe la page sur l\u2019ecran d\u2019accueil pour la rendre persistante'); }); });
+  else e.textContent = txt;
+}
+function sauvegarder() {
+  var d = new Date(), h = d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '_' + ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2);
+  var blob = new Blob([JSON.stringify({ format: 'tracklogics-mt', version: PAGE_VER, date: d.toISOString(), ordre: ordreVoitures, voitures: voitures })], { type: 'application/json' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tracklogics_sauvegarde_' + h + '.json'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  jrn('Sauvegarde ecrite : ' + a.download + ' (' + Math.round(blob.size / 1024) + ' ko)');
+}
+function restaurer(fichier) {
+  if (!fichier) return; var lecteur = new FileReader();
+  lecteur.onload = function () {
+    try {
+      var s = JSON.parse(lecteur.result); if (!s || s.format !== 'tracklogics-mt' || !s.voitures) { alert('Ce fichier n\u2019est pas une sauvegarde TRACKLOGICS MT.'); return; }
+      var ajoutes = 0;
+      Object.keys(s.voitures).forEach(function (m) {
+        var src = s.voitures[m]; if (!voitures[m]) { voitures[m] = { mac: m, nom: src.nom, num: src.num, fw: src.fw, vuMs: 0, idx: null, laps: {}, traces: {} }; ordreVoitures.push(m); }
+        var v = voitures[m];
+        Object.keys(src.laps || {}).forEach(function (n) { if (!v.laps[n]) { v.laps[n] = src.laps[n]; ajoutes++; } if (!v.traces[n] && src.traces && src.traces[n]) v.traces[n] = src.traces[n]; marquer(m, +n); });
+        marquer(m, null);
+      });
+      if (!vueMac && ordreVoitures.length) vueMac = ordreVoitures[0];
+      sauver(); rendre(); jrn('Restauration : ' + ajoutes + ' tour(s) ajoute(s) depuis ' + fichier.name); alert(ajoutes + ' tour(s) restaure(s). Les tours deja presents sont gardes tels quels.');
+    } catch (e) { alert('Sauvegarde illisible : ' + e.message); }
+  };
+  lecteur.readAsText(fichier);
+}
+function charger() {
+  dbOuvrir().then(function () {
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(function (ok) { jrn('Memoire persistante : ' + (ok ? 'accordee' : 'refusee (installe la page sur l\u2019ecran d\u2019accueil)')); });
+    return dbLireTout();
+  }).then(function (r) {
+    if (!r.voitures.length && !r.tours.length) {   // premiere ouverture en v22 : on importe l'ancien localStorage
+      chargerLocal(); Object.keys(voitures).forEach(function (m) { marquer(m, null); Object.keys(voitures[m].laps).forEach(function (n) { marquer(m, +n); }); Object.keys(voitures[m].traces).forEach(function (n) { marquer(m, +n); }); });
+      if (Object.keys(voitures).length) { sauverMaintenant(); jrn('Memoire : ' + Object.keys(voitures).length + ' voiture(s) importee(s) de localStorage vers IndexedDB'); }
+      try { localStorage.removeItem('mt_voitures'); } catch (e) {}
+    } else {
+      r.voitures.sort(function (a, b) { return (a.ordre || 0) - (b.ordre || 0); }).forEach(function (x) { voitures[x.mac] = { mac: x.mac, nom: x.nom, num: x.num, fw: x.fw, vuMs: x.vuMs, idx: null, laps: {}, traces: {} }; ordreVoitures.push(x.mac); });
+      r.tours.forEach(function (t) { var v = voitures[t.mac]; if (!v) { v = voitures[t.mac] = { mac: t.mac, nom: '?', num: 0, fw: '', vuMs: 0, idx: null, laps: {}, traces: {} }; ordreVoitures.push(t.mac); } if (t.lap) v.laps[t.num] = t.lap; if (t.trace) v.traces[t.num] = t.trace; });
+      if (ordreVoitures.length) vueMac = ordreVoitures[0];
+    }
+    rendre(); memoireEtat();
+  }).catch(function (e) { jrn('\u26a0 IndexedDB indisponible (' + e.message + ') : memoire de secours localStorage'); chargerLocal(); rendre(); memoireEtat(); });
+}
+function chargerLocal() {
+  try {
+    var s = JSON.parse(localStorage.getItem('mt_voitures') || 'null');
+    if (s && s.voitures) { voitures = s.voitures; ordreVoitures = s.ordre || Object.keys(voitures); Object.keys(voitures).forEach(function (m) { voitures[m].idx = null; }); vueMac = ordreVoitures[0] || null; }
+  } catch (e) {}
+}
+
+// ---- rendu ----
+function duree(ms) {   // [v16] m:ss.cc
+  if (ms == null) return '—'; var c = Math.round(ms / 10), m = Math.floor(c / 6000), sc = c - m * 6000;
+  return m + ':' + (sc < 1000 ? '0' : '') + (sc / 100).toFixed(2);
+}
+function dureeCourte(ms) { if (ms == null) return '—'; return ms < 60000 ? (ms / 1000).toFixed(2) + ' s' : duree(ms); }
+function ecartTexte(d) { if (d == null) return '—'; return (d > 0 ? '+' : '') + (d / 1000).toFixed(2) + ' s'; }
+function lapsTries(v) { return Object.keys(v.laps).map(Number).sort(function (a, b) { return a - b; }).map(function (n) { return v.laps[n]; }); }
+// [v21] LES SESSIONS ET LES JOURNEES. Sur le fil (PT2.1.39), numero = session x 200 + tour : le tour affiche
+// est n % 200, la session est n / 200. La session porte aussi l'UTC de son depart (catalogue 0x0B) ; sans
+// heure (vieux kits), on se rabat sur l'heure de reception. Une journee = la date locale de la session.
+function lapNumAff(l) { return l.num >= 200 ? l.num % 200 : l.num; }
+function lapSessionCle(l) { return l.num >= 200 ? 's' + Math.floor(l.num / 200) : 'n0'; }
+function lapInstantMs(l) { return l.debutUtc ? l.debutUtc * 1000 : (l.recuMs || 0); }
+function jourTexte(ms) { var d = new Date(ms); return d.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
+function heureTexte(ms) { var d = new Date(ms); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+var MOTIFS = { 1: 'demarrage du kit', 2: 'remise a zero', 3: 'apres un arret', 4: 'changement de site', 5: 'session precedente pleine' };
+// les sessions d'une voiture : [{cle, laps (ordre croissant), debutMs, finMs, jour, best, n}] du plus vieux au plus recent
+function sessionsDe(v) {
+  var map = {}, ordre = [];
+  lapsTries(v).forEach(function (l) {
+    var k = lapSessionCle(l); if (!map[k]) { map[k] = { cle: k, laps: [], best: null, motif: l.motif }; ordre.push(k); }
+    var sn = map[k]; sn.laps.push(l); if (l.dureeMs != null && (!sn.best || l.dureeMs < sn.best.dureeMs)) sn.best = l;
+    if (l.motif && !sn.motif) sn.motif = l.motif;
+  });
+  var out = ordre.map(function (k) {
+    var sn = map[k], l0 = sn.laps[0], lN = sn.laps[sn.laps.length - 1];
+    sn.debutMs = l0.sessionUtc ? l0.sessionUtc * 1000 : lapInstantMs(l0); sn.finMs = lN.finUtc ? lN.finUtc * 1000 : (lN.recuMs || sn.debutMs);
+    sn.jour = new Date(sn.debutMs).toDateString(); sn.n = sn.laps.length; return sn;
+  });
+  out.sort(function (a, b) { return a.debutMs - b.debutMs; });
+  // le numero de session dans sa journee (1, 2, 3...)
+  var parJour = {}; out.forEach(function (sn) { parJour[sn.jour] = (parJour[sn.jour] || 0) + 1; sn.numJour = parJour[sn.jour]; });
+  return out;
+}
+function sessionDe(v, lap) { var k = lapSessionCle(lap), r = null; sessionsDe(v).forEach(function (sn) { if (sn.cle === k) r = sn; }); return r; }
+// les tours de la meme session (ordre croissant), ou de la meme journee
+function lapsSession(v, lap) { var sn = sessionDe(v, lap); return sn ? sn.laps : lapsTries(v); }
+function lapsJour(v, lap) { var sn = sessionDe(v, lap), out = []; if (!sn) return lapsTries(v); sessionsDe(v).forEach(function (x) { if (x.jour === sn.jour) out = out.concat(x.laps); }); return out; }
+var sessionsRepliees = {};   // ce que le doigt a replie, garde d'un rendu a l'autre
+function rendre() {   // [v17] la position verticale est gardee : seul le doigt fait defiler
+  var sy = window.scrollY || window.pageYOffset || 0;
+  try { rendre0(); } finally {
+    // si le contenu a raccourci, on reserve la place au bas de la page pour ne pas remonter
+    document.body.style.minHeight = '';
+    var besoin = sy + window.innerHeight, haut = document.documentElement.scrollHeight;
+    document.body.style.minHeight = haut < besoin ? besoin + 'px' : '';
+    if (Math.abs((window.scrollY || 0) - sy) > 1) window.scrollTo(0, sy);
+  }
+}
+function rendre0() {
+  var tabs = document.getElementById('tabs'); tabs.innerHTML = '';
+  ordreVoitures.forEach(function (m) {
+    var v = voitures[m]; var portee = v.vuMs && (Date.now() - v.vuMs) < 30000;
+    var d = document.createElement('div'); d.className = 'tab' + (m === vueMac ? ' on' : '');
+    d.innerHTML = '<div class="nom"><span class="portee' + (portee ? ' ok' : '') + '"></span>' + v.nom + '</div><div class="sub">' + (details ? m : 'n° ' + v.num) + ' · ' + Object.keys(v.laps).length + ' tour(s)</div>';
+    d.onclick = function () { vueMac = m; vueTour = null; rendre(); };
+    tabs.appendChild(d);
+  });
+  document.getElementById('vide').style.display = ordreVoitures.length ? 'none' : '';
+  document.getElementById('voiture').style.display = vueMac ? '' : 'none';
+  if (!vueMac) return;
+  var v = voitures[vueMac];
+  document.getElementById('vNom').textContent = v.nom;
+  document.getElementById('vSub').textContent = 'n° ' + v.num + (details ? ' · ' + v.mac + (v.fw ? ' · ' + v.fw : '') : '') + (v.vuMs ? ' · vu il y a ' + Math.round((Date.now() - v.vuMs) / 1000) + ' s' : '');
+  var lapsTous = lapsTries(v);
+  if (vueTour == null && lapsTous.length) vueTour = lapsTous[lapsTous.length - 1].num;
+  // [v21] journees -> sessions -> tours (le plus recent en haut a chaque niveau)
+  var sessions = sessionsDe(v), bloc = document.getElementById('toursBloc'), hb = '', jourCourant = null;
+  var derniere = sessions.length ? sessions[sessions.length - 1].cle : null, vueLap = vueTour != null ? v.laps[vueTour] : null, vueCle = vueLap ? lapSessionCle(vueLap) : null;
+  sessions.slice().reverse().forEach(function (sn) {
+    if (sn.jour !== jourCourant) { jourCourant = sn.jour; hb += '<div class="jour">' + jourTexte(sn.debutMs) + '</div>'; }
+    var ouverte = sessionsRepliees[sn.cle] != null ? !sessionsRepliees[sn.cle] : (sn.cle === derniere || sn.cle === vueCle);
+    hb += '<details class="session" data-cle="' + sn.cle + '"' + (ouverte ? ' open' : '') + '><summary>Session ' + sn.numJour + ' <span class="small">· ' + heureTexte(sn.debutMs) + (sn.finMs > sn.debutMs ? ' – ' + heureTexte(sn.finMs) : '') + ' · ' + sn.n + ' tour' + (sn.n > 1 ? 's' : '') + (sn.best ? ' · meilleur ' + duree(sn.best.dureeMs) : '') + (sn.motif && MOTIFS[sn.motif] ? ' · ' + MOTIFS[sn.motif] : '') + '</span></summary>';
+    hb += '<table><thead><tr><th>#</th><th class="num">Temps</th><th class="num">Écart</th><th>Chrono</th><th class="num">Heure</th></tr></thead><tbody>';
+    sn.laps.slice().reverse().forEach(function (l, j) {
+      var prec = sn.laps[sn.laps.length - 2 - j] || null;
+      hb += '<tr class="clic' + (l.num === vueTour ? ' sel' : '') + '" data-num="' + l.num + '"><td>#' + lapNumAff(l) + (sn.best && l === sn.best ? ' ★' : '') + '</td><td class="num">' + duree(l.dureeMs) + '</td><td class="num">'
+        + (prec && prec.dureeMs != null && l.dureeMs != null ? ecartTexte(l.dureeMs - prec.dureeMs) : '—') + '</td><td>' + source(l.source) + '</td><td class="num small">'
+        + (l.finUtc ? new Date(l.finUtc * 1000).toTimeString().slice(0, 8) : l.recuMs ? new Date(l.recuMs).toTimeString().slice(0, 8) + ' (reçu)' : '') + '</td></tr>';
+    });
+    hb += '</tbody></table></details>';
+  });
+  bloc.innerHTML = hb;
+  bloc.querySelectorAll('tr[data-num]').forEach(function (tr) { tr.onclick = function () { vueTour = +tr.getAttribute('data-num'); rendre(); }; });
+  bloc.querySelectorAll('details.session').forEach(function (d) { d.querySelector('summary').onclick = function () { sessionsRepliees[d.getAttribute('data-cle')] = d.open; }; });   // au clic : l'etat d'avant = ce que le doigt replie
+  var lap = vueLap;
+  document.getElementById('tourCard').style.display = lap ? '' : 'none';
+  if (!lap) return;
+  var laps = lapsSession(v, lap), sess = sessionDe(v, lap), best = sess ? sess.best : null;
+  var i = laps.indexOf(lap), prec = i > 0 ? laps[i - 1] : null;
+  document.getElementById('tNum').textContent = '#' + lapNumAff(lap);
+  document.getElementById('tSess').textContent = sess ? 'Session ' + sess.numJour + ' · ' + jourTexte(sess.debutMs) + (lap.debutUtc ? ' · ' + new Date(lap.debutUtc * 1000).toTimeString().slice(0, 8) : '') : '';
+  document.getElementById('tTemps').textContent = duree(lap.dureeMs);
+  document.getElementById('tEcart').textContent = prec && prec.dureeMs != null && lap.dureeMs != null ? ecartTexte(lap.dureeMs - prec.dureeMs) : '—';
+  document.getElementById('tBest').textContent = best && lap.dureeMs != null ? (lap === best ? 'meilleur' : ecartTexte(lap.dureeMs - best.dureeMs)) : '—';
+  document.getElementById('tSrc').textContent = lap.dureeMs == null ? '⚠ Resume du tour pas encore recu (valeurs ou trace seulement).' : 'Chronometrage : ' + source(lap.source) + (lap.dMax ? ' · jusqu’a ' + lap.dMax + ' m de l’origine' : '');
+  // les 4 valeurs
+  var tv = document.getElementById('tVals'); tv.style.display = valeursOn ? '' : 'none';
+  // [v20] p1..p4 viennent du resume 0x08 (exacts), p5..p8 des echantillons 0x0A a 1 Hz ; le point de couleur = le marqueur du MAX sur la carte
+  var ech = canEchantillons(lap), hv = '', nbLignes = 0;
+  for (var k = 0; k < 8; k++) {
+    var it = k < 4 && lap.pv ? lap.pv.items[k] : null, c = lap.cat && lap.cat.ch[k], rs = canResume(lap, ech, k);
+    if (it && it.idx === 255) it = null;
+    if (!it && !rs) continue;
+    var nom = (it && it.nom) || (c && c.nom) || ('canal ' + (it ? it.idx : c ? c.idx : k)), unite = (it && it.unite) || (c && c.unite) || '';
+    var mn = it ? it.min : rs.min, mx = it ? it.max : rs.max, moy = it ? it.moy : rs.moy, n = it ? it.n : rs.n, dec = Math.abs(mx) >= 100 ? 0 : 1;
+    hv += '<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + CAN_COULEURS[k] + ';margin-right:6px;vertical-align:middle"></span>' + nom + '</td><td class="num">' + mn.toFixed(dec) + '</td><td class="num"><b>' + moy.toFixed(dec) + '</b></td><td class="num">' + mx.toFixed(dec) + '</td><td class="num small">' + n + (it ? '' : ' <span title="echantillons a 1 Hz">(1 Hz)</span>') + '</td><td class="small">' + unite + '</td></tr>';
+    nbLignes++;
+  }
+  if (nbLignes) tv.innerHTML = '<tr><th>Valeur</th><th class="num">Min</th><th class="num">Moy</th><th class="num">Max</th><th class="num">n</th><th></th></tr>' + hv;
+  else tv.innerHTML = '<tr><td class="small">Les valeurs de ce tour ne sont pas encore recues.</td></tr>';
+  circuitRendre(v, lap);   // [v10]
+  dessiner(v, lap);
+}
+function source(s) { return s === 1 ? 'ligne GPS (precis)' : s === 2 ? 'radio, pic du signal' : s === 0 ? 'radio, 1er beacon' : '?'; }
+
+// ---- la carte ----
+// La carte a une ORIENTATION de base (nord en haut, ou tournee pour que le
+// trace occupe le plus de place) et une vue MANUELLE par-dessus : zoom,
+// rotation, deplacement au doigt. Le fond satellite est demande en carre,
+// centre sur la vue, assez grand pour couvrir toute rotation, et dessine
+// avec la meme transformation que le trace.
+var carte = { mode: 'max', zoom: 1, rot: 0, panX: 0, panY: 0, verrou: true };   // [v13] la page ouvre en vue verrouillee
+var pointVu = null;   // [v5] l'indice du point du trace touche (vue verrouillee), ou null
+// [v5] LE VERROU : la vue ne bouge plus (ni zoom, ni rotation, ni deplacement) ; un doigt
+// sur le trace montre la vitesse a ce point. Sans verrou, le doigt deplace la carte.
+function verrouBascule() {
+  carte.verrou = !carte.verrou; pointVu = null;
+  var b = document.getElementById('btnVerrou'); b.textContent = carte.verrou ? '🔒 Vue verrouillée' : '🔓 Vue libre';
+  b.style.background = carte.verrou ? 'var(--ok)' : ''; b.style.color = carte.verrou ? '#fff' : '';
+  rendre();
+}
+// [v4] le filigrane : le logo TRACLOGICS (la banniere JPEG du depot, fond blanc rendu
+// transparent au chargement) en bas de la carte, sur un fond gris semi-transparent.
+var logoImg = new Image(); var logoCanvas = null;
+logoImg.onload = function () {
+  var oc = document.createElement('canvas'); oc.width = logoImg.width; oc.height = logoImg.height;
+  var og = oc.getContext('2d'); og.drawImage(logoImg, 0, 0);
+  try {
+    var id = og.getImageData(0, 0, oc.width, oc.height), d = id.data;
+    for (var k = 0; k < d.length; k += 4) { var m = Math.min(d[k], d[k + 1], d[k + 2]); if (m > 225) d[k + 3] = 0; else if (m > 190) d[k + 3] = Math.round((225 - m) / 35 * 255); }
+    og.putImageData(id, 0, 0);
+  } catch (e) {}
+  logoCanvas = oc; if (vueMac && vueTour != null) rendre();
+};
+logoImg.src = 'logo-traclogics.jpg';
+function filigrane(g, w, h) {
+  if (!logoCanvas) return;
+  var lw = Math.min(w * 0.28, 214), lh = lw * logoCanvas.height / logoCanvas.width, x = 14, y = h - lh - 10;   // [v6] un tiers plus petit, a gauche
+  g.save();
+  g.fillStyle = 'rgba(120,120,120,0.55)'; g.beginPath(); g.roundRect(x - 10, y - 6, lw + 20, lh + 12, 10); g.fill();
+  g.globalAlpha = 0.95; g.drawImage(logoCanvas, x, y, lw, lh);
+  g.restore();
+}
+var satDemandeMs = 0;
+function orientChoisir(m) { carte.mode = m; carte.zoom = 1; carte.rot = 0; carte.panX = carte.panY = 0; try { localStorage.setItem('mt_orient', m); } catch (e) {} rendre(); }
+function carteRecadrer() { carte.zoom = 1; carte.rot = 0; carte.panX = carte.panY = 0; rendre(); }
+// l'angle qui couche le grand axe du trace dans le sens le plus long du canevas
+function angleMax(pts, w, h) {
+  var n = pts.length, mx = 0, my = 0; pts.forEach(function (p) { mx += p.dx; my += p.dy; }); mx /= n; my /= n;
+  var sxx = 0, syy = 0, sxy = 0; pts.forEach(function (p) { var x = p.dx - mx, y = p.dy - my; sxx += x * x; syy += y * y; sxy += x * y; });
+  var a = 0.5 * Math.atan2(2 * sxy, sxx - syy);   // direction du grand axe (radians, depuis l'est vers le nord)
+  var t = (w >= h) ? -a : (Math.PI / 2 - a);        // canevas large : grand axe horizontal ; haut : vertical
+  // [v18] le grand axe a deux sens ; on prend celui qui garde le nord vers le HAUT (ou a droite s'il est couche).
+  // Sans ca, un tour a peine different faisait basculer la carte de 180 degres (tour #7 du 21 sept. 2026, nord a gauche).
+  var cn = Math.cos(t), sn = Math.sin(t);
+  if (cn < -1e-6 || (Math.abs(cn) <= 1e-6 && sn < 0)) t += Math.PI;
+  return t;
+}
+function couleur(kmh, min, max) { var u = max > min ? (kmh - min) / (max - min) : 0.5; return 'hsl(' + (140 - 140 * Math.max(0, Math.min(1, u))) + ', 85%, 50%)'; }
+// [v18] les points de toutes les traces de la voiture sur le meme site (origine a moins de 3 km),
+// ramenes dans le repere du tour affiche : c'est le cadre commun de la carte.
+function cadreSite(v, lap, pts) {
+  if (lap.oLat == null || (Math.abs(lap.oLat) < 1e-4 && Math.abs(lap.oLon) < 1e-4)) return pts;
+  var R0 = 6371000, rad0 = Math.PI / 180, cosLat = Math.cos(lap.oLat * rad0), out = pts.slice();
+  Object.keys(v.laps).forEach(function (n) {
+    var l = v.laps[n]; if (l === lap || l.oLat == null || (Math.abs(l.oLat) < 1e-4 && Math.abs(l.oLon) < 1e-4)) return;
+    var ox = (l.oLon - lap.oLon) * rad0 * R0 * cosLat, oy = (l.oLat - lap.oLat) * rad0 * R0;
+    if (Math.hypot(ox, oy) > 3000) return;   // un autre site
+    traceEntiere(v.traces[l.num]).forEach(function (p) { out.push({ dx: p.dx + ox, dy: p.dy + oy }); });
+  });
+  return out;
+}
+function dessiner(v, lap) {
+  var c = document.getElementById('carte'), lg = document.getElementById('carteLeg');
+  var pts = traceEntiere(v.traces[lap.num]);
+  c.style.display = '';
+  var dpr = window.devicePixelRatio || 1, w = c.clientWidth || 600;
+  var h = Math.max(180, Math.min(460, Math.round(w * 0.72), Math.round(window.innerHeight * 0.55)));
+  c.style.height = h + 'px'; c.width = w * dpr; c.height = h * dpr;
+  var g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  if (pts.length < 2) {   // [v17] la carte garde sa place : la page ne raccourcit pas
+    lg.textContent = 'Trace pas encore recue.'; proj = null;
+    g.fillStyle = '#9a9a9a'; g.font = '14px system-ui'; g.textAlign = 'center'; g.fillText('Trace pas encore re\u00e7ue', w / 2, h / 2); g.textAlign = 'left';
+    return;
+  }
+  var cadre = cadreSite(v, lap, pts);   // [v18] l'union des traces du site, dans le repere de ce tour
+  var xs = cadre.map(function (p) { return p.dx; }), ys = cadre.map(function (p) { return p.dy; });
+  var cx = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2, cy = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
+  var theta = (carte.mode === 'nord' ? 0 : angleMax(cadre, w, h)) + carte.rot;
+  // l'echelle de base : le CADRE tourne doit tenir dans le canevas
+  var cos = Math.cos(theta), sin = Math.sin(theta), minU = 1e9, maxU = -1e9, minV = 1e9, maxV = -1e9;
+  cadre.forEach(function (p) { var x = p.dx - cx, y = p.dy - cy; var u = x * cos - y * sin, vv = x * sin + y * cos; if (u < minU) minU = u; if (u > maxU) maxU = u; if (vv < minV) minV = vv; if (vv > maxV) maxV = vv; });
+  var pad = 24, s0 = Math.min((w - 2 * pad) / Math.max(maxU - minU, 1), (h - 2 * pad) / Math.max(maxV - minV, 1));
+  var s = s0 * carte.zoom;
+  // [v9] ⚠ ON CENTRE LA BOITE TOURNEE, PAS LE CENTRE TOURNE. Le centre de la boite des points non
+  // tournes, une fois tourne, n'est PAS le centre de la boite des points tournes : le trace se
+  // decalait et sortait du canevas d'un cote (tour #903 du 21 sept. 2026, coupe a droite).
+  var uc = (minU + maxU) / 2, vc = (minV + maxV) / 2;
+  // metres -> ecran : centre du trace au centre du canevas, rotation theta, y vers le haut, puis le deplacement au doigt
+  function X(x, y) { var u = (x - cx) * cos - (y - cy) * sin; return w / 2 + (u - uc) * s + carte.panX; }
+  function Y(x, y) { var vv = (x - cx) * sin + (y - cy) * cos; return h / 2 - (vv - vc) * s + carte.panY; }
+  // [v12] LE FOND EST GEOGRAPHIQUE. L'image garde le lat/lon de son centre et son echelle ; on la
+  // pose la ou ce point tombe dans le repere du tour AFFICHE, quel que soit le tour. Deux tours de la
+  // meme voiture (ou de deux voitures) sur la meme piste partagent donc la meme image : pas de nouveau
+  // chargement quand on change de tour. On ne recharge que si le centre de la vue s'est eloigne de plus
+  // d'un quart d'image, ou si l'echelle a change de plus de 25 %.
+  var R0 = 6371000, rad0 = Math.PI / 180;
+  var cle = null, satOk = false;
+  if (lap.oLat != null && !(Math.abs(lap.oLat) < 1e-4 && Math.abs(lap.oLon) < 1e-4)) {
+    // le centre de la vue, en metres du tour puis en lat/lon
+    var u0 = -carte.panX / s + uc, v0 = carte.panY / s + vc;
+    var vx0 = cx + u0 * cos + v0 * sin, vy0 = cy - u0 * sin + v0 * cos;
+    var vLat = lap.oLat + (vy0 / R0) / rad0, vLon = lap.oLon + (vx0 / (R0 * Math.cos(lap.oLat * rad0))) / rad0;
+    var D0 = Math.sqrt(w * w + h * h);
+    cle = { lat: vLat, lon: vLon, s: s, D: D0, w: w, h: h };
+    if (satImg) {
+      var ddy = (satImg.lat - vLat) * rad0 * R0, ddx = (satImg.lon - vLon) * rad0 * R0 * Math.cos(vLat * rad0);
+      satOk = Math.hypot(ddx, ddy) * s < D0 / 4 && Math.abs(s / satImg.s - 1) < 0.25 && Math.abs(satImg.D - D0) < 2;
+    }
+    if (satImg) {
+      // l'image se pose sur son centre geographique, ramene dans le repere de CE tour
+      var ix = (satImg.lon - lap.oLon) * rad0 * R0 * Math.cos(lap.oLat * rad0), iy = (satImg.lat - lap.oLat) * rad0 * R0;
+      g.save(); g.globalAlpha = 0.85;
+      g.translate(X(ix, iy), Y(ix, iy)); g.rotate(-theta);
+      var Dn = satImg.D * (s / satImg.s);
+      g.drawImage(satImg, -Dn / 2, -Dn / 2, Dn, Dn);
+      g.restore(); g.globalAlpha = 1;
+    }
+  }
+  var vs = pts.map(function (p) { return p.kmh; }), vmin = Math.min.apply(null, vs), vmax = Math.max.apply(null, vs);
+  // [v15] la reference : delta de vitesse a la meme distance parcourue
+  compRef = compReference(v, lap); var dvs = null;
+  if (compRef) {
+    var ptsRef = traceEntiere(v.traces[compRef.num]), dRef = distCumul(ptsRef), dCur = distCumul(pts);
+    dvs = pts.map(function (p, i) { return p.kmh - vitesseA(ptsRef, dRef, dCur[i]); });
+  }
+  g.lineWidth = 5; g.lineCap = 'round'; g.lineJoin = 'round';
+  for (var i = 1; i < pts.length; i++) {
+    g.strokeStyle = dvs ? couleurDelta((dvs[i - 1] + dvs[i]) / 2) : couleur((pts[i - 1].kmh + pts[i].kmh) / 2, vmin, vmax);
+    g.beginPath(); g.moveTo(X(pts[i - 1].dx, pts[i - 1].dy), Y(pts[i - 1].dx, pts[i - 1].dy)); g.lineTo(X(pts[i].dx, pts[i].dy), Y(pts[i].dx, pts[i].dy)); g.stroke();
+  }
+  g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.arc(X(pts[0].dx, pts[0].dy), Y(pts[0].dx, pts[0].dy), 5, 0, Math.PI * 2); g.fill(); g.stroke();
+  // [v10] l'axe du circuit reconnu (fin, blanc) et les bornes des partielles (traits magenta)
+  if (circVue && circVue.axe && partiellesOn) {
+    g.save(); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1.5; g.setLineDash([6, 6]); g.beginPath();
+    circVue.axe.forEach(function (p, i) { var x = X(p.dx, p.dy), y = Y(p.dx, p.dy); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); }); g.closePath(); g.stroke(); g.restore();
+  }
+  if (circVue && circVue.bornes && partiellesOn) {
+    circVue.bornes.forEach(function (b, i) {
+      var x = X(b.dx, b.dy), y = Y(b.dx, b.dy);
+      g.save(); g.strokeStyle = '#fff'; g.lineWidth = 6; g.beginPath(); g.arc(x, y, 7, 0, Math.PI * 2); g.stroke(); g.strokeStyle = '#ff1fd0'; g.lineWidth = 3; g.stroke();
+      g.fillStyle = '#ff1fd0'; g.font = 'bold 12px system-ui'; g.fillText('P' + (i + 2), x + 10, y - 8); g.restore();
+    });
+  }
+  // [v20] LES MAX DES CANAUX : un point de couleur la ou chaque canal a atteint son maximum (demande du 21 sept. 2026 :
+  // les max seulement, pas les min). La position vient du temps : seconde du max -> instant -> point de la trace.
+  if (valeursOn && lap.can) {
+    var echM = canEchantillons(lap), trM = v.traces[lap.num], etiq = [];
+    for (var kc = 0; kc < 8; kc++) {
+      var rsM = canResume(lap, echM, kc); if (!rsM || rsM.sMax < 0) continue;
+      var pM = positionA(pts, trM && trM.intervalMs, rsM.sMax * 1000); if (!pM) continue;
+      var cM = lap.cat && lap.cat.ch[kc], nomM = (cM && cM.nom) || ('p' + (kc + 1)), decM = Math.abs(rsM.max) >= 100 ? 0 : 1;
+      etiq.push({ x: X(pM.dx, pM.dy), y: Y(pM.dx, pM.dy), k: kc, txt: nomM.slice(0, 12) + ' ' + rsM.max.toFixed(decM) + (cM && cM.unite ? ' ' + cM.unite : '') });
+    }
+    etiq.forEach(function (e, i) {
+      g.save(); g.beginPath(); g.arc(e.x, e.y, 6, 0, Math.PI * 2); g.fillStyle = CAN_COULEURS[e.k]; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
+      g.font = 'bold 11px system-ui'; var tw = g.measureText(e.txt).width, ex = Math.min(w - tw - 8, Math.max(2, e.x + 9)), ey = e.y + (i % 2 ? 16 : -8);
+      g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(ex - 2, ey - 10, tw + 4, 13); g.fillStyle = CAN_COULEURS[e.k]; g.fillText(e.txt, ex, ey); g.restore();
+    });
+  }
+  // la boussole : une fleche vers le nord, en haut a droite
+  g.save(); g.translate(w - 22, 24); g.rotate(-theta);
+  g.fillStyle = '#ff1fd0'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(0, -14); g.lineTo(6, 6); g.lineTo(0, 2); g.lineTo(-6, 6); g.closePath(); g.fill(); g.stroke();
+  g.restore(); g.fillStyle = '#ff1fd0'; g.font = 'bold 11px system-ui'; g.fillText('N', w - 26, 44);
+  filigrane(g, w, h);   // [v3]
+  // [v5] le point touche : un cercle et sa vitesse
+  if (carte.verrou && pointVu != null && pointVu < pts.length) {
+    var pv = pts[pointVu], px = X(pv.dx, pv.dy), py = Y(pv.dx, pv.dy);
+    g.save();
+    g.beginPath(); g.arc(px, py, 9, 0, Math.PI * 2); g.strokeStyle = '#fff'; g.lineWidth = 3; g.stroke(); g.strokeStyle = '#000'; g.lineWidth = 1; g.stroke();
+    var txt = pv.kmh + ' km/h' + (dvs ? ' (' + (dvs[pointVu] >= 0 ? '+' : '') + dvs[pointVu].toFixed(0) + ')' : ''); g.font = 'bold 14px system-ui'; var tw = g.measureText(txt).width;
+    var bx = Math.min(w - tw - 16, Math.max(4, px - tw / 2 - 6)), by = py - 34 < 4 ? py + 14 : py - 34;
+    g.fillStyle = 'rgba(0,0,0,0.75)'; g.beginPath(); g.roundRect(bx, by, tw + 12, 22, 6); g.fill();
+    g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(txt, bx + 6, by + 11);
+    g.restore();
+  }
+  proj = { cx: cx, cy: cy, uc: uc, vc: vc, theta: theta, s: s, w: w, h: h, lap: lap, cle: cle, X: X, Y: Y, pts: pts };
+  var t = v.traces[lap.num], manque = t ? t.nb - t.parts.filter(function (p) { return p; }).length : 0;
+  lg.textContent = (dvs ? 'Delta de vitesse vs #' + compRef.num + ' : vert = plus vite, rouge = moins vite, gris = pareil (±10 km/h). ' : 'Vert = lent, rouge = rapide (' + Math.round(vmin) + ' a ' + Math.round(vmax) + ' km/h). ') + pts.length + ' points' + (manque > 0 ? ' — ' + manque + ' morceau(x) manquant(s).' : '') + (carte.zoom !== 1 ? ' · zoom ×' + carte.zoom.toFixed(1) : '');
+  if (satVoulu && cle && !satOk) satPlanifier(lap, cle);
+}
+function satBascule() { satVoulu = document.getElementById('satOn').checked; try { localStorage.setItem('mt_sat', satVoulu ? '1' : '0'); } catch (e) {} rendre(); }
+// on attend la fin du geste (600 ms sans changement) avant de demander une image
+function satPlanifier(lap, cle) {
+  satDemandeMs = Date.now();
+  setTimeout(function () { if (Date.now() - satDemandeMs >= 550 && proj && proj.cle && satCleTexte(proj.cle) === satCleTexte(cle) && satCle !== satCleTexte(cle)) satCharger(lap, cle); }, 600);
+}
+function satCleTexte(c) { return c.lat.toFixed(5) + '/' + c.lon.toFixed(5) + '/' + Math.round(c.s * 100) + '/' + Math.round(c.D); }
+function satCharger(lap, cle) {
+  if (!cle) return;
+  var R = 6371000, rad = Math.PI / 180, demi = cle.D / (2 * cle.s);   // demi-cote du carre, en metres
+  function lat(dy) { return cle.lat + (dy / R) / rad; } function lon(dx) { return cle.lon + (dx / (R * Math.cos(cle.lat * rad))) / rad; }
+  function d6(x) { return x.toFixed(6); }
+  var W = Math.max(64, Math.min(1024, Math.round(cle.D)));
+  var url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=' + d6(lon(-demi)) + ',' + d6(lat(-demi)) + ',' + d6(lon(demi)) + ',' + d6(lat(demi)) + '&bboxSR=4326&imageSR=3857&size=' + W + ',' + W + '&format=png&transparent=false&f=image';
+  document.getElementById('satEtat').textContent = 'Chargement du fond...';
+  var im = new Image(); im.crossOrigin = 'anonymous';
+  im.lat = cle.lat; im.lon = cle.lon; im.s = cle.s; im.D = cle.D;
+  im.onload = function () { satImg = im; satCle = satCleTexte(cle); document.getElementById('satEtat').textContent = ''; rendre(); };
+  im.onerror = function () { satImg = null; satCle = ''; document.getElementById('satEtat').textContent = 'Fond satellite non recu (reseau ?).'; };
+  im.src = url;
+}
+// ---- les gestes : un doigt deplace, deux doigts zooment et tournent, double toucher recadre ----
+(function () {
+  var c = document.getElementById('carte'), doigts = {}, dernierTap = 0, dep = null;
+  function liste() { return Object.keys(doigts).map(function (k) { return doigts[k]; }); }
+  c.addEventListener('pointerdown', function (e) {
+    c.setPointerCapture(e.pointerId); doigts[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var l = liste();
+    if (carte.verrou) { suivre(e, 30); e.preventDefault(); return; }   // [v7] le doigt se pose : le point le plus proche
+    if (l.length === 1) { var t = Date.now(); if (t - dernierTap < 350) { carteRecadrer(); dernierTap = 0; } else dernierTap = t; dep = { x: e.clientX, y: e.clientY, panX: carte.panX, panY: carte.panY }; }
+    if (l.length === 2) dep = { d: Math.hypot(l[1].x - l[0].x, l[1].y - l[0].y), a: Math.atan2(l[1].y - l[0].y, l[1].x - l[0].x), mx: (l[0].x + l[1].x) / 2, my: (l[0].y + l[1].y) / 2, zoom: carte.zoom, rot: carte.rot, panX: carte.panX, panY: carte.panY };
+    e.preventDefault();
+  });
+  c.addEventListener('pointermove', function (e) {
+    if (!doigts[e.pointerId]) return;
+    if (carte.verrou) { suivre(e, 80); e.preventDefault(); return; }   // [v7] le doigt glisse : l'etiquette suit, plus tolerant (80 px)
+    doigts[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var l = liste(); if (!dep) return;
+    if (l.length === 1 && dep.panX != null && dep.d == null) { carte.panX = dep.panX + (e.clientX - dep.x); carte.panY = dep.panY + (e.clientY - dep.y); }
+    else if (l.length === 2 && dep.d != null) {
+      var d = Math.hypot(l[1].x - l[0].x, l[1].y - l[0].y), a = Math.atan2(l[1].y - l[0].y, l[1].x - l[0].x);
+      carte.zoom = Math.max(0.3, Math.min(20, dep.zoom * d / dep.d));
+      carte.rot = dep.rot - (a - dep.a);   // les doigts tournent la carte avec eux
+      carte.panX = dep.panX + ((l[0].x + l[1].x) / 2 - dep.mx); carte.panY = dep.panY + ((l[0].y + l[1].y) / 2 - dep.my);
+    }
+    if (vueMac && vueTour != null) dessiner(voitures[vueMac], voitures[vueMac].laps[vueTour]);
+    e.preventDefault();
+  });
+  // [v7] vue verrouillee : designer le point du trace le plus proche du doigt, a `tol` px au plus.
+  // ⚠ ON NE REDESSINE QUE SI LE POINT CHANGE : le doigt qui glisse envoie des dizaines
+  // d'evenements par seconde, et un redessin complet (fond satellite compris) a chacun
+  // ferait saccader la tablette.
+  function suivre(e, tol) {
+    if (!proj || !proj.pts) return;
+    var r = c.getBoundingClientRect(), fx = e.clientX - r.left, fy = e.clientY - r.top, best = -1, bestD = 1e9;
+    for (var i = 0; i < proj.pts.length; i++) { var dx = proj.X(proj.pts[i].dx, proj.pts[i].dy) - fx, dy = proj.Y(proj.pts[i].dx, proj.pts[i].dy) - fy; var d = dx * dx + dy * dy; if (d < bestD) { bestD = d; best = i; } }
+    var neuf = Math.sqrt(bestD) <= tol ? best : pointVu;   // hors tolerance en glissant : on garde le dernier point
+    if (neuf === pointVu) return;
+    pointVu = neuf;
+    if (vueMac && vueTour != null) dessiner(voitures[vueMac], voitures[vueMac].laps[vueTour]);
+  }
+  function fin(e) { delete doigts[e.pointerId]; var l = liste(); dep = l.length === 1 ? { x: l[0].x, y: l[0].y, panX: carte.panX, panY: carte.panY } : null; }
+  c.addEventListener('pointerup', fin); c.addEventListener('pointercancel', fin); c.addEventListener('pointerout', fin);
+  c.addEventListener('wheel', function (e) { if (carte.verrou) return; carte.zoom = Math.max(0.3, Math.min(20, carte.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); if (vueMac && vueTour != null) dessiner(voitures[vueMac], voitures[vueMac].laps[vueTour]); e.preventDefault(); }, { passive: false });
+})();
+
+// ---- export CSV ----
+function csvTelecharger(nom, texte) {
+  var b = new Blob(['\ufeff' + texte], { type: 'text/csv;charset=utf-8' }); var a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = nom; a.click();
+}
+function csvChamp(x) { x = String(x == null ? '' : x); return /[;"\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }
+function toursCsv() {
+  var lignes = ['voiture;mac;num;jour;session;session_debut;tour;tour_fil;tour_debut;tour_fin;temps_s;ecart_precedent_s;chrono;recu;p1_nom;p1_unite;p1_min;p1_moy;p1_max;p1_n;p2_nom;p2_unite;p2_min;p2_moy;p2_max;p2_n;p3_nom;p3_unite;p3_min;p3_moy;p3_max;p3_n;p4_nom;p4_unite;p4_min;p4_moy;p4_max;p4_n;p5_nom;p5_unite;p5_min;p5_moy;p5_max;p5_n;p6_nom;p6_unite;p6_min;p6_moy;p6_max;p6_n;p7_nom;p7_unite;p7_min;p7_moy;p7_max;p7_n;p8_nom;p8_unite;p8_min;p8_moy;p8_max;p8_n;origine_lat;origine_lon;dist_max_m;points_trace'];
+  ordreVoitures.forEach(function (m) {
+    var v = voitures[m], laps = lapsTries(v), sessions = sessionsDe(v);
+    laps.forEach(function (l, i) {
+      var sn = null; sessions.forEach(function (x) { if (x.cle === lapSessionCle(l)) sn = x; });
+      var prec = sn && sn.laps.indexOf(l) > 0 ? sn.laps[sn.laps.indexOf(l) - 1] : null;
+      var iso = function (ms) { return ms ? new Date(ms).toISOString() : ''; };
+      var r = [v.nom, m, v.num, sn ? new Date(sn.debutMs).toISOString().slice(0, 10) : '', sn ? sn.numJour : '', sn ? iso(sn.debutMs) : '', lapNumAff(l), l.num, iso(l.debutUtc ? l.debutUtc * 1000 : 0), iso(l.finUtc ? l.finUtc * 1000 : 0), l.dureeMs != null ? (l.dureeMs / 1000).toFixed(3) : '', prec && prec.dureeMs != null && l.dureeMs != null ? ((l.dureeMs - prec.dureeMs) / 1000).toFixed(3) : '', source(l.source), l.recuMs ? new Date(l.recuMs).toISOString() : ''];
+      var echC = canEchantillons(l);   // [v20] p1..p4 du resume, p5..p8 des echantillons a 1 Hz
+      for (var k = 0; k < 8; k++) {
+        var it = k < 4 && l.pv ? l.pv.items[k] : null, c = l.cat && l.cat.ch[k], rs = it && it.idx !== 255 ? null : canResume(l, echC, k);
+        if (it && it.idx !== 255) r.push(it.nom || ('canal ' + it.idx), it.unite, +it.min.toFixed(3), +it.moy.toFixed(3), +it.max.toFixed(3), it.n);
+        else if (rs) r.push((c && c.nom) || ('p' + (k + 1)), (c && c.unite) || '', +rs.min.toFixed(3), +rs.moy.toFixed(3), +rs.max.toFixed(3), rs.n);
+        else r.push('', '', '', '', '', '');
+      }
+      r.push(l.oLat != null ? l.oLat.toFixed(7) : '', l.oLon != null ? l.oLon.toFixed(7) : '', l.dMax != null ? l.dMax : '', traceEntiere(v.traces[l.num]).length);
+      lignes.push(r.map(csvChamp).join(';'));
+    });
+  });
+  csvTelecharger('tracklogics_tours_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.csv', lignes.join('\n'));
+  jrn('Export CSV : ' + (lignes.length - 1) + ' tour(s).');
+}
+function traceCsv() {
+  if (!vueMac || vueTour == null) { jrn('Pas de tour affiche : rien a exporter.'); return; }
+  var v = voitures[vueMac], lap = v.laps[vueTour], pts = traceEntiere(v.traces[vueTour]);
+  if (!pts.length) { jrn('Le tour #' + vueTour + ' n\u2019a pas de trace.'); return; }
+  var t = v.traces[vueTour], interv = t && t.intervalMs ? t.intervalMs : '';
+  var lignes = ['voiture;tour;point;dx_m;dy_m;kmh;lat;lon'];
+  var R = 6371000, rad = Math.PI / 180;
+  pts.forEach(function (p, i) {
+    var la = lap.oLat != null ? (lap.oLat + (p.dy / R) / rad).toFixed(7) : '', lo = lap.oLon != null ? (lap.oLon + (p.dx / (R * Math.cos(lap.oLat * rad))) / rad).toFixed(7) : '';
+    lignes.push([v.nom, vueTour, i, p.dx, p.dy, p.kmh, la, lo].join(';'));
+  });
+  csvTelecharger('tracklogics_trace_' + v.nom + '_tour' + vueTour + '.csv', lignes.join('\n'));
+  jrn('Export CSV de la trace du tour #' + vueTour + ' : ' + pts.length + ' points.');
+}
+
+// ---- [v10] la base de circuits et les partielles ----
+// Deux CSV a la racine du depot (geometrie OpenStreetMap, ODbL) : l'axe de
+// piste de chaque circuit, en metres depuis une origine. On reconnait le
+// circuit d'un tour en projetant sa trace sur chaque axe proche ; s'il
+// colle (ecart median < 20 m, plus de 60 % de l'axe parcouru), on decoupe
+// l'axe en N partielles egales A PARTIR DE LA LIGNE DU TOUR (le point 0 de
+// la trace), dans le sens de roulage, et on lit l'heure de passage a chaque
+// borne par interpolation entre deux points de trace. Le temps total est
+// celui du module (precis) ; les partielles ont la precision de la trace
+// (un point toutes les ~0,3 a 0,7 s, donc a quelques dixiemes pres).
+var circuits = null, circErreur = '';
+var secteursN = 3;
+var circVue = null;   // l'axe et les bornes du tour AFFICHE, en metres du repere du tour (pas garde en memoire locale)
+function csvLignes(t) { return t.split(/\r?\n/).filter(function (l) { return l.length && l[0] !== '#'; }); }
+function csvChamps(l) { var out = [], cur = '', q = false; for (var i = 0; i < l.length; i++) { var c = l[i]; if (c === '"') { q = !q; } else if (c === ',' && !q) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; }
+function circuitsCharger() {
+  Promise.all([fetch('./circuits_index.csv').then(function (r) { if (!r.ok) throw new Error('index ' + r.status); return r.text(); }),
+               fetch('./circuits_offsets.csv').then(function (r) { if (!r.ok) throw new Error('offsets ' + r.status); return r.text(); })])
+  .then(function (tx) {
+    var li = csvLignes(tx[0]), lo = csvLignes(tx[1]);
+    var hi = csvChamps(li[0]), ho = csvChamps(lo[0]);
+    function col(h, n) { return h.indexOf(n); }
+    var c = {};
+    for (var i = 1; i < li.length; i++) {
+      var f = csvChamps(li[i]); if (f.length < 10) continue;
+      c[f[col(hi, 'track_id')]] = { id: f[col(hi, 'track_id')], nom: f[col(hi, 'nom')], oLat: +f[col(hi, 'origine_lat')], oLon: +f[col(hi, 'origine_lon')], longueur: +f[col(hi, 'longueur_m')],
+                                    mLat: +f[col(hi, 'm_par_deg_lat')], mLon: +f[col(hi, 'm_par_deg_lon')], sens: f[col(hi, 'sens')], fiab: f[col(hi, 'fiabilite')], pts: [] };
+    }
+    for (var j = 1; j < lo.length; j++) { var g = csvChamps(lo[j]); var k = c[g[col(ho, 'track_id')]]; if (k) k.pts.push({ x: +g[col(ho, 'x_m')], y: +g[col(ho, 'y_m')] }); }
+    circuits = Object.keys(c).map(function (id) { return c[id]; }).filter(function (k) { return k.pts.length >= 3; });
+    // l'abscisse curviligne de chaque sommet, polyligne fermee
+    circuits.forEach(function (k) { var cum = [0]; for (var i = 1; i <= k.pts.length; i++) { var a = k.pts[i - 1], b = k.pts[i % k.pts.length]; cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y)); } k.cum = cum; k.L = cum[k.pts.length]; });
+    jrn('Base de circuits : ' + circuits.length + ' traces.'); rendre();
+  }).catch(function (e) { circErreur = e.message; jrn('Base de circuits non chargee : ' + e.message); });
+}
+// la projection d'un point (repere du circuit) sur l'axe : distance et abscisse curviligne
+function circProjeter(k, x, y) {
+  var best = { d: 1e9, s: 0 };
+  for (var i = 0; i < k.pts.length; i++) {
+    var a = k.pts[i], b = k.pts[(i + 1) % k.pts.length], ex = b.x - a.x, ey = b.y - a.y, l2 = ex * ex + ey * ey;
+    var t = l2 > 0 ? Math.max(0, Math.min(1, ((x - a.x) * ex + (y - a.y) * ey) / l2)) : 0;
+    var px = a.x + t * ex, py = a.y + t * ey, d = Math.hypot(x - px, y - py);
+    if (d < best.d) { best.d = d; best.s = k.cum[i] + t * Math.sqrt(l2); }
+  }
+  return best;
+}
+// le circuit qui colle a ce tour, ou null. Rend aussi les points projetes.
+function circuitPourTour(lap, pts) {
+  if (!circuits || lap.oLat == null || !pts || pts.length < 10) return null;
+  var meilleur = null;
+  circuits.forEach(function (k) {
+    var dLat = (lap.oLat - k.oLat) * k.mLat, dLon = (lap.oLon - k.oLon) * k.mLon;
+    if (Math.hypot(dLat, dLon) > 5000) return;   // pas le meme site
+    var ds = [], ss = [];
+    pts.forEach(function (p) { var pr = circProjeter(k, dLon + p.dx, dLat + p.dy); ds.push(pr.d); ss.push(pr.s); });
+    var tri = ds.slice().sort(function (a, b) { return a - b; }), med = tri[Math.floor(tri.length / 2)];
+    // la couverture : combien de tranches de 2 % de l'axe ont recu au moins un point
+    var tranches = {}; ss.forEach(function (sv) { tranches[Math.floor(sv / k.L * 50)] = 1; }); var couv = Object.keys(tranches).length / 50;
+    if (med > 20 || couv < 0.6) return;
+    var score = med + (1 - couv) * 20;
+    if (!meilleur || score < meilleur.score) meilleur = { c: k, med: med, couv: couv, score: score, ss: ss, dLat: dLat, dLon: dLon };
+  });
+  return meilleur;
+}
+// les partielles : bornes a k x L/N depuis la ligne du tour, dans le sens de roulage
+function secteursCalculer(lap, pts, m, N, intervalMs) {
+  var k = m.c, L = k.L, ss = m.ss, n = pts.length;
+  if (!intervalMs || n < 10) return null;
+  // sens : la majorite des pas d'abscisse (modulo L) sont-ils positifs ?
+  var pos = 0, neg = 0;
+  for (var i = 1; i < n; i++) { var d = ss[i] - ss[i - 1]; if (d > L / 2) d -= L; if (d < -L / 2) d += L; if (Math.abs(d) < L / 4) { if (d > 0) pos++; else if (d < 0) neg++; } }
+  var sensPos = pos >= neg;
+  // l'abscisse relative a la ligne, deroulee (monotone croissante dans le sens de roulage)
+  var r = [0], s0 = ss[0];
+  for (var i2 = 1; i2 < n; i2++) { var dd = ss[i2] - ss[i2 - 1]; if (dd > L / 2) dd -= L; if (dd < -L / 2) dd += L; if (!sensPos) dd = -dd; r.push(Math.max(r[i2 - 1], r[i2 - 1] + dd)); }
+  var t = function (i) { return i * intervalMs; };
+  var bornes = [], tB = [];
+  for (var q = 1; q < N; q++) {
+    var B = q * L / N, tb = null;
+    for (var i3 = 1; i3 < n; i3++) if (r[i3] >= B && r[i3 - 1] < B) { var f = (B - r[i3 - 1]) / Math.max(r[i3] - r[i3 - 1], 1e-6); tb = t(i3 - 1) + f * (t(i3) - t(i3 - 1)); break; }
+    bornes.push(B); tB.push(tb);
+  }
+  var total = lap.dureeMs != null ? lap.dureeMs : t(n - 1);
+  var sect = [], prev = 0;
+  for (var q2 = 0; q2 < N; q2++) { var fin = q2 < N - 1 ? tB[q2] : total; sect.push(fin != null && prev != null ? fin - prev : null); prev = fin; }
+  return { sect: sect, bornes: bornes, sensPos: sensPos, parcouru: r[n - 1], L: L };
+}
+function secteursChoisir() { secteursN = +document.getElementById('circN').value; try { localStorage.setItem('mt_sectN', secteursN); } catch (e) {} rendre(); }
+// le rendu du bloc, appele par rendre() ; rend aussi ce qu'il faut a la carte (bornes en metres du repere du tour)
+function circuitRendre(v, lap) {
+  var bloc = document.getElementById('circBloc'); bloc.style.display = 'none'; circVue = null;
+  { var ref0 = compReference(v, lap), ci0 = document.getElementById('compInfo');
+    if (!ref0) ci0.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
+    else ci0.innerHTML = 'vs <b>#' + lapNumAff(ref0) + '</b> (' + duree(ref0.dureeMs) + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref0.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref0.dureeMs) + '</b>' : ''); }
+  if (!circuits) { if (circErreur) document.getElementById('circNote').textContent = 'Base de circuits : ' + circErreur; return; }
+  var pts = traceEntiere(v.traces[lap.num]), m = circuitPourTour(lap, pts);
+  if (!m) return;
+  var tr = v.traces[lap.num], res = secteursCalculer(lap, pts, m, secteursN, tr.intervalMs);
+  bloc.style.display = '';
+  document.getElementById('circNom').textContent = m.c.nom;
+  document.getElementById('circInfo').textContent = 'reconnu (écart médian ' + m.med.toFixed(0) + ' m, ' + Math.round(m.couv * 100) + ' % de l\u2019axe, ' + m.c.longueur.toFixed(0) + ' m)';
+  if (!res) { document.getElementById('tSect').innerHTML = ''; document.getElementById('circNote').textContent = 'Pas de base de temps dans la trace : partielles impossibles.'; return; }
+  // le meilleur tour de cette voiture sur ce circuit, pour les ecarts
+  var laps = (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap)), meilleurs = null, meilleurNum = null;   // [v21] dans la session
+  laps.forEach(function (l) {
+    if (l.dureeMs == null) return; var p2 = traceEntiere(v.traces[l.num]); var m2 = circuitPourTour(l, p2); if (!m2 || m2.c.id !== m.c.id) return;
+    var r2 = secteursCalculer(l, p2, m2, secteursN, v.traces[l.num].intervalMs); if (!r2) return;
+    if (!meilleurs) { meilleurs = r2.sect.slice(); meilleurNum = {}; r2.sect.forEach(function (x, i) { meilleurNum[i] = l.num; }); }
+    else r2.sect.forEach(function (x, i) { if (x != null && (meilleurs[i] == null || x < meilleurs[i])) { meilleurs[i] = x; meilleurNum[i] = l.num; } });
+  });
+  // [v15] les partielles du tour de reference, pour la colonne « vs #ref »
+  var ref = compReference(v, lap), refSect = null;
+  if (ref) { var pr = traceEntiere(v.traces[ref.num]), mr = circuitPourTour(ref, pr); if (mr && mr.c.id === m.c.id) { var rr = secteursCalculer(ref, pr, mr, secteursN, v.traces[ref.num].intervalMs); if (rr) refSect = rr.sect; } }
+  var h = '<tr><th>Partielle</th><th class="num">Temps</th>' + (ref ? '<th class="num">vs #' + lapNumAff(ref) + '</th>' : '') + '<th class="num">Écart vs meilleure</th><th class="small">Meilleure</th></tr>';
+  var gagne = [], perd = [];
+  res.sect.forEach(function (x, i) {
+    var mb = meilleurs ? meilleurs[i] : null, rs = refSect ? refSect[i] : null, dr = (x != null && rs != null) ? x - rs : null;
+    if (dr != null) (dr <= 0 ? gagne : perd).push('P' + (i + 1));
+    h += '<tr><td>P' + (i + 1) + ' <span class="small">(' + Math.round(i * res.L / secteursN) + '–' + Math.round((i + 1) * res.L / secteursN) + ' m)</span></td><td class="num"><b>' + dureeCourte(x) + '</b></td>'
+      + (ref ? '<td class="num">' + (dr != null ? '<span style="color:' + (dr <= 0 ? 'var(--ok)' : 'var(--warn)') + ';font-weight:600">' + ecartTexte(dr) + '</span>' : '\u2014') + '</td>' : '')
+      + '<td class="num">' + (x != null && mb != null ? (x - mb <= 0 ? '<span style="color:var(--ok)">' : '') + ecartTexte(x - mb) + (x - mb <= 0 ? '</span>' : '') : '\u2014') + '</td><td class="small">' + (meilleurNum && meilleurNum[i] != null ? '#' + lapNumAff(v.laps[meilleurNum[i]]) : '') + '</td></tr>';
+  });
+  document.getElementById('tSect').innerHTML = h;
+  var ci = document.getElementById('compInfo');
+  if (!ref) ci.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
+  else ci.innerHTML = 'vs <b>#' + lapNumAff(ref) + '</b> (' + duree(ref.dureeMs) + ', ' + (compMode === 'meilleur' ? 'meilleur de la session' : compMode === 'jour' ? 'meilleur de la journée' : 'précédent') + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref.dureeMs) + '</b>' : '')
+      + (refSect ? ' · gagne ' + (gagne.length ? gagne.join(' ') : '\u2014') + ', perd ' + (perd.length ? perd.join(' ') : '\u2014') : '');
+  document.getElementById('partBloc').style.display = partiellesOn ? '' : 'none'; document.getElementById('circNLabel').style.display = partiellesOn ? '' : 'none';
+  document.getElementById('circNote').textContent = 'Bornes à ' + Math.round(res.L / secteursN) + ' m depuis la ligne du tour, dans le sens de roulage (' + (res.sensPos ? m.c.sens : (m.c.sens === 'horaire' ? 'antihoraire' : 'horaire')) + '). Précision : celle de la trace (un point / ' + tr.intervalMs + ' ms).';
+  // les bornes pour la carte : abscisse -> point de l'axe -> repere du tour
+  var bornes = [];
+  res.bornes.forEach(function (B) {
+    var sAbs = m.ss[0] + (res.sensPos ? B : -B); sAbs = ((sAbs % m.c.L) + m.c.L) % m.c.L;
+    var k = m.c, i = 0; while (i < k.pts.length - 1 && k.cum[i + 1] < sAbs) i++;
+    var a = k.pts[i], b = k.pts[(i + 1) % k.pts.length], f = (sAbs - k.cum[i]) / Math.max(k.cum[i + 1] - k.cum[i], 1e-6);
+    bornes.push({ dx: a.x + f * (b.x - a.x) - m.dLon, dy: a.y + f * (b.y - a.y) - m.dLat });
+  });
+  circVue = { bornes: bornes, axe: m.c.pts.map(function (p) { return { dx: p.x - m.dLon, dy: p.y - m.dLat }; }) };
+}
+
+// ---- commandes ----
+async function ligneRefaire() {
+  if (!vueMac) return;
+  if (!confirm('Refaire la ligne virtuelle de ' + voitures[vueMac].nom + ' ? Le module oublie sa ligne et la recalibre aux 2 prochains passages.')) return;
+  if (await envoyerCmd(vueMac, [0x03])) etat('Ligne de ' + voitures[vueMac].nom + ' a refaire : commande partie.');
+}
+async function toursEffacer() {
+  if (!vueMac) return;
+  var v = voitures[vueMac];
+  if (!confirm('Effacer les ' + Object.keys(v.laps).length + ' tour(s) de ' + v.nom + ' sur cette page, et remettre son compteur a zero ?')) return;
+  v.laps = {}; v.traces = {}; vueTour = null; dbEffacerVoiture(vueMac); marquer(vueMac, null); sauver(); rendre(); memoireEtat();   // [v22]
+  if (await envoyerCmd(vueMac, [0x05])) etat('Tours de ' + v.nom + ' remis a zero.');
+}
+
+// ---- mise a jour automatique de la page ----
+// Le service worker recharge la page des qu'une nouvelle version est
+// installee (controllerchange), et on lui demande de verifier toutes les
+// minutes. Les donnees sont en memoire locale : rien n'est perdu.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js').then(function (reg) {
+    setInterval(function () { reg.update().catch(function () {}); }, 60000);
+    reg.addEventListener('updatefound', function () { document.getElementById('majBadge').style.display = ''; });
+  }).catch(function () {});
+  var recharge = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () { if (recharge) return; recharge = true; jrn('Nouvelle version : rechargement.'); setTimeout(function () { location.reload(); }, 500); });
+}
+
+document.getElementById('pageVer').textContent = 'page ' + PAGE_VER;
+charger();
+try { satVoulu = localStorage.getItem('mt_sat') === '1'; document.getElementById('satOn').checked = satVoulu; carte.mode = localStorage.getItem('mt_orient') === 'nord' ? 'nord' : 'max'; } catch (e) {}
+document.querySelector('input[name=orient][value=' + carte.mode + ']').checked = true;
+try { details = localStorage.getItem('mt_details') === '1'; } catch (e) {}
+document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails';
+try { secteursN = +(localStorage.getItem('mt_sectN') || 3) || 3; partiellesOn = localStorage.getItem('mt_part') !== '0'; valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode; document.getElementById('circN').value = secteursN; document.getElementById('partOn').checked = partiellesOn;
+circuitsCharger();
+rendre();
+setInterval(function () { rendre(); memoireEtat(); }, 10000);   // « vu il y a … », le point de portee, la memoire
+jrn('Page ' + PAGE_VER + ' prete.');
+</script>
+</body>
+</html>

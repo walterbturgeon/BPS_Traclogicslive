@@ -1,0 +1,35 @@
+# Base de traces de circuits - geometrie OpenStreetMap (c) contributeurs OSM, ODbL
+# Axe de piste. Pas de ligne depart/arrivee ni de secteurs (absents d'OSM).
+# Repere par circuit : ENU plan tangent, origine = 1er point, x=Est y=Nord en metres.
+# lat = origine_lat + y/m_par_deg_lat ; lon = origine_lon + x/m_par_deg_lon
+# Polyligne fermee : le dernier point se relie au point 0.
+# Colonne 'fiabilite' : lire avant d'utiliser un trace pour du chronometrage.
+track_id,nom,type,province,origine_lat,origine_lon,longueur_m,points,m_par_deg_lat,m_par_deg_lon,sens,fiabilite
+mont-tremblant,Circuit Mont-Tremblant,routier,QC,46.1897580,-74.6114480,4234.9,110,111155.0,77198.11,antihoraire,OSM direct
+gilles-villeneuve,Circuit Gilles-Villeneuve,routier,QC,45.5045620,-73.5236030,4359.6,96,111141.6,78151.80,horaire,"OSM direct - valide contre la longueur homologuee (4359,6 vs 4361 m)"
+sanair-routier,Sanair - circuit routier,routier,QC,45.5336160,-72.8780640,2000.7,84,111142.2,78111.59,horaire,reconstruit - config+sens confirmes par l'utilisateur
+icar-c1,"ICAR - Grand circuit (réf. officielle 3,420 km)",routier,QC,45.6800680,-74.0217690,3333.8,93,111145.0,77908.59,antihoraire,cycle enumere dans le reseau OSM - a valider
+icar-c2,ICAR - Grand circuit avec chicane nord-ouest,routier,QC,45.6800680,-74.0217690,3057.1,91,111145.0,77908.59,antihoraire,cycle enumere dans le reseau OSM - a valider
+icar-c3,ICAR - Circuit moyen (sans la boucle est),routier,QC,45.6800680,-74.0217690,2404.6,66,111145.0,77908.59,antihoraire,cycle enumere dans le reseau OSM - a valider
+icar-c4,ICAR - Circuit moyen avec chicane nord-ouest,routier,QC,45.6800680,-74.0217690,2127.8,63,111145.0,77908.59,antihoraire,cycle enumere dans le reseau OSM - a valider
+icar-c5,ICAR - Boucle nord,routier,QC,45.6800680,-74.0217690,1568.2,40,111145.0,77908.59,antihoraire,cycle enumere dans le reseau OSM - a valider
+icar-c6,ICAR - Boucle nord avec chicane,routier,QC,45.6800680,-74.0217690,1291.5,37,111145.0,77908.59,antihoraire,cycle enumere dans le reseau OSM - a valider
+icar-c7,ICAR - Boucle sud,routier,QC,45.6800680,-74.0217690,1124.7,38,111145.0,77908.59,antihoraire,cycle enumere dans le reseau OSM - a valider
+icar-c8,ICAR - Petite boucle technique (secteur ouest),routier,QC,45.6809580,-74.0233430,779.2,39,111145.1,77907.36,antihoraire,cycle enumere dans le reseau OSM - a valider
+delaware-speedway,"Delaware Speedway (Ontario) - ovale 0,500 mi",ovale,ON,42.9317450,-81.4176310,804.9,161,111091.4,81631.23,antihoraire,"RECALE +14,5 m pour atteindre 805 m - estimation, a valider"
+sh-k1,SH Karting - K1 — tracé maximal (toutes les boucles),karting,QC,45.6000680,-73.1374920,1278.7,71,111143.5,78019.54,antihoraire,cycle enumere dans le reseau OSM - a valider
+sh-k2,SH Karting - K2 — grand tracé,karting,QC,45.6000260,-73.1374840,1171.9,69,111143.5,78019.60,antihoraire,cycle enumere dans le reseau OSM - a valider
+sh-k3,SH Karting - K3 — tracé moyen,karting,QC,45.6000260,-73.1374840,1068.6,59,111143.5,78019.60,horaire,cycle enumere dans le reseau OSM - a valider
+sh-k4,SH Karting - K4 — tracé sans la boucle centrale,karting,QC,45.6006570,-73.1384430,974.3,51,111143.5,78018.73,antihoraire,cycle enumere dans le reseau OSM - a valider
+sh-k5,SH Karting - K5 — boucle de base,karting,QC,45.6006570,-73.1384430,843.1,40,111143.5,78018.73,antihoraire,cycle enumere dans le reseau OSM - a valider
+sh-k6,SH Karting - K6 — petite boucle nord,karting,QC,45.6005770,-73.1396070,315.6,16,111143.5,78018.84,antihoraire,cycle enumere dans le reseau OSM - a valider
+granby,Autodrome de Granby,ovale,QC,45.3925860,-72.7961090,794.7,21,111139.4,78306.59,antihoraire,OSM direct
+drummondville,Autodrome de Drummondville,ovale,QC,45.9056000,-72.5533320,636.2,30,111149.4,77594.97,antihoraire,OSM direct
+riverside-ste-croix,Circuit Riverside Speedway Ste-Croix,ovale,QC,46.6325520,-71.7896700,1328.2,35,111163.6,76575.89,antihoraire,OSM direct
+yvon-duhamel,Circuit Yvon-Duhamel,routier court,QC,45.5562590,-72.3346550,767.1,23,111142.6,78080.24,antihoraire,OSM direct
+sanair-oval,Sanair International Speedway,ovale,QC,45.5330370,-72.8780430,551.8,25,111142.2,78112.39,antihoraire,OSM direct
+sanair-super,Sanair Super Speedway,ovale,QC,45.5303790,-72.8770490,1303.0,36,111142.1,78116.07,antihoraire,OSM direct
+blainville-alpha,Blainville ALPHA - ovale basse vitesse,ovale essais,QC,45.6978440,-73.8689260,6880.0,52,111145.4,77883.92,antihoraire,OSM direct
+blainville-bravo,Blainville BRAVO - ovale haute vitesse,ovale essais,QC,45.7043830,-73.8803080,6668.6,46,111145.5,77874.84,antihoraire,OSM direct
+blainville-piste-c,Blainville - piste sans nom (OSM),boucle essais,QC,45.6981580,-73.8701840,1230.1,30,111145.4,77883.48,antihoraire,OSM direct
+sc-performance-karting,Sc Performance Karting inc.,karting,QC,46.2279490,-72.4410740,1078.1,59,111155.7,77144.63,horaire,OSM direct
