@@ -4,11 +4,14 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'draglog-mt-';
-const CACHE = PREFIX + 'v76';   // v76 : la case Partielles disparait, le mode decide seul
-const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg', '../circuits_index.csv', '../circuits_offsets.csv'];
+const CACHE = PREFIX + 'v77';   // v77 : base de circuits trouvee a cote de la page ; installation qui ne casse plus
+const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg',
+                './circuits_index.csv', './circuits_offsets.csv', '../circuits_index.csv', '../circuits_offsets.csv'];
 
 self.addEventListener('install', (ev) => {
-  ev.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+  // [v77] UN FICHIER ABSENT NE TUE PLUS L'INSTALLATION. addAll echoue en entier des qu'un
+  // seul fichier manque : la page restait alors en « mise a jour... » pour toujours.
+  ev.waitUntil(caches.open(CACHE).then((c) => Promise.all(ASSETS.map((u) => c.add(u).catch(() => null)))));
   self.skipWaiting();
 });
 self.addEventListener('activate', (ev) => {
