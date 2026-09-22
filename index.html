@@ -170,7 +170,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v29';
+var PAGE_VER = 'MT v30';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -646,7 +646,9 @@ function rendre0() {
   document.getElementById('tTemps').textContent = duree(lap.dureeMs);
   document.getElementById('tEcart').textContent = prec && prec.dureeMs != null && lap.dureeMs != null ? ecartTexte(lap.dureeMs - prec.dureeMs) : '—';
   document.getElementById('tBest').textContent = best && lap.dureeMs != null ? (lap === best ? 'meilleur' : ecartTexte(lap.dureeMs - best.dureeMs)) : '—';
-  document.getElementById('tSrc').textContent = lap.dureeMs == null ? '⚠ Resume du tour pas encore recu (valeurs ou trace seulement).' : 'Chronometrage : ' + source(lap.source) + (lap.dMax ? ' · jusqu’a ' + lap.dMax + ' m de l’origine' : '');
+  var av = document.getElementById('tSrc');
+  av.textContent = lap.dureeMs == null ? '\u26a0 Resume du tour pas encore recu (valeurs ou trace seulement).' : '';
+  av.style.display = lap.dureeMs == null ? '' : 'none';
   // les 4 valeurs
   var tv = document.getElementById('tVals'); tv.style.display = valeursOn ? '' : 'none';
   // [v20] p1..p4 viennent du resume 0x08 (exacts), p5..p8 des echantillons 0x0A a 1 Hz ; le point de couleur = le marqueur du MAX sur la carte
