@@ -165,10 +165,17 @@
             <path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>
           </svg></button></div>
       <div class="row">
+        <button class="btn sec" onclick="limitesBascule()">Limites °C</button>
         <button class="btn sec" onclick="ligneRefaire()">Refaire la ligne</button>
         <button class="btn sec" onclick="toursEffacer()">Effacer les tours</button>
       </div>
     </div>
+    <div id="limitesBloc" class="row" style="display:none;margin-top:10px;gap:16px">
+      <label class="small">Eau <input type="range" id="limEau" min="90" max="125" step="1" oninput="limitesChange()"> <b id="limEauV"></b> °C</label>
+      <label class="small">Huile <input type="range" id="limHuile" min="100" max="150" step="1" oninput="limitesChange()"> <b id="limHuileV"></b> °C</label>
+      <label class="small">Air <input type="range" id="limAir" min="20" max="90" step="1" oninput="limitesChange()"> <b id="limAirV"></b> °C</label>
+    </div>
+    <div id="alerteTemp" class="row" style="display:none;margin-top:10px"></div>
   </div>
 
   <div class="deux">   <!-- [v26] en largeur : la carte a gauche, les tours a droite -->
@@ -226,7 +233,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v51';
+var PAGE_VER = 'MT v52';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -589,6 +596,58 @@ function canValeurA(lap, ech, k, tMs) {
 var smartOn = false;
 var RE_GAZ = /throttle|papillon|tps/i, RE_RPM = /rpm|engine speed|regime/i;
 var RE_TEMP = /temp|^t_|coolant|huile|eau|iat|cact|egt|pneu|tire|tyre/i;
+// [v52] LES LIMITES DE TEMPERATURE, UNE PAR VOITURE. Elles servent dans les DEUX modes : en
+// normal, elles allument un message des qu'un tour les atteint ; en smart, elles cadrent aussi
+// l'analyse (une approche a 5 degres est dite avant que la limite tombe). Gardees par voiture,
+// dans l'appareil, parce qu'une limite depend du moteur, pas de la page.
+var LIM_DEF = { eau: 110, huile: 130, air: 60 };
+var LIM_BORNES = { eau: [90, 125], huile: [100, 150], air: [20, 90] };
+var limitesTout = {};
+function limites(mac) {
+  var l = limitesTout[mac] || {};
+  return { eau: l.eau || LIM_DEF.eau, huile: l.huile || LIM_DEF.huile, air: l.air || LIM_DEF.air };
+}
+function limitesBascule() {
+  var b = document.getElementById('limitesBloc');
+  b.style.display = b.style.display === 'none' ? 'flex' : 'none';
+  if (b.style.display !== 'none') limitesMaj();
+}
+function limitesMaj() {
+  if (!vueMac) return;
+  var L = limites(vueMac);
+  ['eau', 'huile', 'air'].forEach(function (f) {
+    var e = document.getElementById('lim' + f[0].toUpperCase() + f.slice(1));
+    if (e) { e.value = L[f]; document.getElementById(e.id + 'V').textContent = L[f]; }
+  });
+}
+function limitesChange() {
+  if (!vueMac) return;
+  var L = { eau: +document.getElementById('limEau').value, huile: +document.getElementById('limHuile').value, air: +document.getElementById('limAir').value };
+  limitesTout[vueMac] = L;
+  try { localStorage.setItem('mt_limites', JSON.stringify(limitesTout)); } catch (e) {}
+  limitesMaj(); rendre();
+}
+function tempFamille(nom) {
+  if (/coolant|eau/i.test(nom)) return 'eau';
+  if (/oil t|huile/i.test(nom)) return 'huile';
+  if (/intake|iat|cact|air temp|t_coll/i.test(nom)) return 'air';
+  return null;
+}
+// les messages de temperature du tour affiche : depassement (les deux modes) et approche (smart)
+function alerteTemperatures(v, lap) {
+  if (!lap.cat) return [];
+  var L = limites(v.mac), ech = canEchantillons(lap), out = [];
+  for (var k = 0; k < 8; k++) {
+    var c = lap.cat.ch[k]; if (!c) continue;
+    var f = tempFamille(c.nom); if (!f) continue;
+    var r = canResume(lap, ech, k);
+    var maxi = r ? r.max : (lap.pv && lap.pv.items[k] && lap.pv.items[k].idx !== 255 ? lap.pv.items[k].max : null);
+    if (maxi == null) continue;
+    if (maxi >= L[f]) out.push({ grave: true, txt: '\u26a0 ' + c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 limite ' + L[f] + ' \u00b0C atteinte' });
+    else if (smartOn && maxi >= L[f] - 5) out.push({ grave: false, txt: c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 \u00e0 ' + Math.round(L[f] - maxi) + ' \u00b0C de la limite' });
+  }
+  return out;
+}
 var RE_PAS_TEMP = /amb|ambiant|ambient|track|piste|cam\b/i;
 var RE_TEMP_LARGE = /pneu|tire|tyre|frein|brake|egt|echap|exhaust/i;   // ces familles bougent beaucoup
 function tempSeuil(nom) { return RE_TEMP_LARGE.test(nom) ? 15 : 8; }
@@ -1021,6 +1080,13 @@ function rendre0() {
   document.getElementById('tSess').textContent = sess ? 'Session ' + sess.numJour + ' · ' + jourTexte(sess.debutMs) + (lap.debutUtc ? ' · ' + new Date(lap.debutUtc * 1000).toTimeString().slice(0, 8) : '') : '';
   document.getElementById('tTemps').textContent = duree(lap.dureeMs);
   document.getElementById('tEcart').textContent = prec && prec.dureeMs != null && lap.dureeMs != null ? ecartTexte(lap.dureeMs - prec.dureeMs) : '—';
+  // [v52] les limites de temperature : le message vit dans les deux modes
+  limitesMaj();
+  var al = document.getElementById('alerteTemp'), msgs = alerteTemperatures(v, lap);
+  al.style.display = msgs.length ? 'flex' : 'none';
+  al.innerHTML = msgs.map(function (m) {
+    return '<span class="bande" style="margin-left:0;background:' + (m.grave ? 'var(--warn)' : '#c47f1b') + '">' + m.txt + '</span>';
+  }).join(' ');
   document.getElementById('caseEcart').style.display = smartOn ? 'none' : '';        // [v46]
   document.getElementById('casePotentiel').style.display = smartOn ? '' : 'none';
   if (smartOn) { document.getElementById('tPotentiel').textContent = '—'; document.getElementById('tPotentiel').style.color = ''; }
@@ -1608,6 +1674,7 @@ try { details = localStorage.getItem('mt_details') === '1'; } catch (e) {}
 document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails';
 try { smartOn = localStorage.getItem('mt_smart') === '1'; document.getElementById('smartOn').checked = smartOn; } catch (e) {}
 try { smartZeroMs = +(localStorage.getItem('mt_smartzero') || 0) || 0; } catch (e) {}
+try { limitesTout = JSON.parse(localStorage.getItem('mt_limites') || '{}') || {}; } catch (e) { limitesTout = {}; }
 smartVuMaj(); smartZeroMaj();
 try { var vu = localStorage.getItem('mt_canvu'); if (vu && vu.length === 8) canMontre = vu.split('').map(function (c) { return c === '1'; }); } catch (e) {}
 try { partiellesOn = localStorage.getItem('mt_part') !== '0'; valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode; document.getElementById('partOn').checked = partiellesOn;
