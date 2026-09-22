@@ -233,7 +233,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v52';
+var PAGE_VER = 'MT v53';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -633,19 +633,57 @@ function tempFamille(nom) {
   if (/intake|iat|cact|air temp|t_coll/i.test(nom)) return 'air';
   return null;
 }
-// les messages de temperature du tour affiche : depassement (les deux modes) et approche (smart)
+// [v53] CE QUI COMPTE, C'EST LA VARIATION D'UN TOUR A L'AUTRE. Une eau qui monte de 1 degre par
+// tour est normale sous la limite ; la meme eau qui prend 5 degres au tour suivant annonce un
+// ennui, meme loin de la limite. La page garde donc la SUITE des maximums de la session, compare
+// la hausse de ce tour a la hausse HABITUELLE (la mediane des precedentes), et parle :
+//   rouge  : la limite de la voiture est atteinte
+//   jaune  : la hausse depasse l'habitude d'au moins 3 degres (ou 3 degres d'un coup sans histoire)
+//   jaune  : en smart seulement, la valeur arrive a 5 degres de la limite
+// La suite ne garde que les tours de la session en cours : une voiture qui repart froide apres
+// une pause ne doit pas compter comme une chute.
+function tempSuite(v, lap, k, memo) {
+  var suite = [];
+  lapsSession(v, lap).forEach(function (l) {
+    if (!memo[l.num]) memo[l.num] = canEchantillons(l);
+    var r = canResume(l, memo[l.num], k);
+    if (r) suite.push({ num: l.num, max: r.max });
+  });
+  return suite;
+}
+function mediane(t) { if (!t.length) return null; var u = t.slice().sort(function (a, b) { return a - b; }); return u[Math.floor(u.length / 2)]; }
 function alerteTemperatures(v, lap) {
   if (!lap.cat) return [];
-  var L = limites(v.mac), ech = canEchantillons(lap), out = [];
+  var L = limites(v.mac), memo = {}, out = [];
   for (var k = 0; k < 8; k++) {
     var c = lap.cat.ch[k]; if (!c) continue;
-    var f = tempFamille(c.nom); if (!f) continue;
-    var r = canResume(lap, ech, k);
-    var maxi = r ? r.max : (lap.pv && lap.pv.items[k] && lap.pv.items[k].idx !== 255 ? lap.pv.items[k].max : null);
+    var mecanique = RE_TEMP.test(c.nom) && !RE_PAS_TEMP.test(c.nom);
+    var f = tempFamille(c.nom);
+    if (!mecanique && !f) continue;
+    var suite = tempSuite(v, lap, k, memo), i = -1;
+    for (var q = 0; q < suite.length; q++) if (suite[q].num === lap.num) i = q;
+    var maxi = i >= 0 ? suite[i].max : null;
+    if (maxi == null && lap.pv && lap.pv.items[k] && lap.pv.items[k].idx !== 255) maxi = lap.pv.items[k].max;
     if (maxi == null) continue;
-    if (maxi >= L[f]) out.push({ grave: true, txt: '\u26a0 ' + c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 limite ' + L[f] + ' \u00b0C atteinte' });
-    else if (smartOn && maxi >= L[f] - 5) out.push({ grave: false, txt: c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 \u00e0 ' + Math.round(L[f] - maxi) + ' \u00b0C de la limite' });
+    // rouge : la limite de la voiture
+    if (f && maxi >= L[f]) { out.push({ n: 3, txt: '\u26a0 ' + c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 limite ' + L[f] + ' \u00b0C atteinte' }); continue; }
+    // jaune : la hausse de ce tour, comparee a l'habitude de la session
+    if (i > 0) {
+      var hausse = suite[i].max - suite[i - 1].max, avant = [];
+      for (var q2 = 1; q2 < i; q2++) avant.push(suite[q2].max - suite[q2 - 1].max);
+      var hab = mediane(avant);
+      var seuil = Math.max(3, (hab == null ? 0 : Math.max(hab, 0)) + 3);
+      if (hausse >= seuil) {
+        out.push({ n: 2, txt: c.nom + ' +' + Math.round(hausse) + ' \u00b0C ce tour'
+          + (hab != null ? ' \u00b7 habituel ' + (hab >= 0 ? '+' : '') + Math.round(hab) + ' \u00b0C/tour' : '')
+          + ' \u00b7 ' + Math.round(maxi) + ' \u00b0C' + (f ? ' sur ' + L[f] : '') });
+        continue;
+      }
+    }
+    // jaune, en smart : la valeur approche la limite
+    if (smartOn && f && maxi >= L[f] - 5) out.push({ n: 1, txt: c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 \u00e0 ' + Math.round(L[f] - maxi) + ' \u00b0C de la limite' });
   }
+  out.sort(function (a, b) { return b.n - a.n; });
   return out;
 }
 var RE_PAS_TEMP = /amb|ambiant|ambient|track|piste|cam\b/i;
@@ -1085,7 +1123,7 @@ function rendre0() {
   var al = document.getElementById('alerteTemp'), msgs = alerteTemperatures(v, lap);
   al.style.display = msgs.length ? 'flex' : 'none';
   al.innerHTML = msgs.map(function (m) {
-    return '<span class="bande" style="margin-left:0;background:' + (m.grave ? 'var(--warn)' : '#c47f1b') + '">' + m.txt + '</span>';
+    return '<span class="bande" style="margin-left:0;background:' + (m.n === 3 ? 'var(--warn)' : '#c47f1b') + '">' + m.txt + '</span>';
   }).join(' ');
   document.getElementById('caseEcart').style.display = smartOn ? 'none' : '';        // [v46]
   document.getElementById('casePotentiel').style.display = smartOn ? '' : 'none';

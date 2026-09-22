@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'traclogics-mt-';
-const CACHE = PREFIX + 'v52';   // v52 : limites de temperature par voiture (eau, huile, air)
+const CACHE = PREFIX + 'v53';   // v53 : alerte jaune sur la hausse d un tour a l autre, rouge a la limite
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg', './circuits_index.csv', './circuits_offsets.csv'];
 
 self.addEventListener('install', (ev) => {
