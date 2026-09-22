@@ -248,7 +248,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v62';
+var PAGE_VER = 'MT v63';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -692,7 +692,10 @@ function alerteTemperatures(v, lap) {
     // rouge : la limite de la voiture
     if (f && maxi >= L[f]) { out.push({ n: 3, txt: '\u26a0 ' + c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 limite ' + L[f] + ' \u00b0C atteinte' }); continue; }
     // jaune : la hausse de ce tour, comparee a l'habitude de la session
-    if (i > 0) {
+    // [v63] EN MODE NORMAL, RIEN D'AUTRE QUE LA LIMITE. La hausse inhabituelle et l'approche
+    // sont de l'analyse : elles appartiennent au mode smart. En normal, la page ne parle que
+    // si la limite reglee pour cette voiture est atteinte.
+    if (smartOn && i > 0) {
       var hausse = suite[i].max - suite[i - 1].max, avant = [];
       for (var q2 = 1; q2 < i; q2++) avant.push(suite[q2].max - suite[q2 - 1].max);
       var hab = mediane(avant);
