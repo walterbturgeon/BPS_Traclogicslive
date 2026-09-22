@@ -248,7 +248,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v65';
+var PAGE_VER = 'MT v67';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -792,6 +792,7 @@ function horsAnalyse(v, lap) {
 // les virages du circuit, lus dans le tour de reference : on coupe aux points LES PLUS RAPIDES,
 // pour qu'une section porte un virage entier (freinage, corde, sortie).
 var smartBornes = {};
+var smartSectionVue = null;   // [v66] {i0, i1, couleur} : la section que la carte doit montrer
 function smartVirages(v, ref, m) {
   var cle = m.c.id + '|' + ref.num;
   if (smartBornes[cle] !== undefined) return smartBornes[cle];
@@ -1055,6 +1056,17 @@ function duree(ms) {   // [v16] m:ss.cc
 }
 function dureeCourte(ms) { if (ms == null) return '—'; return ms < 60000 ? (ms / 1000).toFixed(2) + ' s' : duree(ms); }
 function ecartTexte(d) { if (d == null) return '—'; return (d > 0 ? '+' : '') + (d / 1000).toFixed(2) + ' s'; }
+function tempsSect(d) {   // [v67] « perd 0,42 s » ou « gagne 0,42 s »
+  if (d == null) return '';
+  return (d > 0 ? 'perd ' : 'gagne ') + (Math.abs(d) / 1000).toFixed(2).replace('.', ',') + ' s';
+}
+function decalTexte(d) {   // [v67] le detour de ligne, s'il depasse 3 m
+  return (d != null && Math.abs(d) >= 3) ? 'trajectoire décalée de ' + Math.abs(d).toFixed(1).replace('.', ',') + ' m (dépassement ?)' : '';
+}
+function pourquoiTxt(pq, d) {   // [v67] la raison, et le detour de ligne s'il y en a un
+  var dcl = decalTexte(d);
+  return (pq && dcl) ? pq + ' · ' + dcl : (pq || dcl);
+}
 function lapsTries(v) { return Object.keys(v.laps).map(Number).sort(function (a, b) { return a - b; }).map(function (n) { return v.laps[n]; }); }
 // [v21] LES SESSIONS ET LES JOURNEES. Sur le fil (PT2.1.39), numero = session x 200 + tour : le tour affiche
 // est n % 200, la session est n / 200. La session porte aussi l'UTC de son depart (catalogue 0x0B) ; sans
@@ -1337,7 +1349,11 @@ function dessiner(v, lap) {
   }
   g.lineWidth = 5; g.lineCap = 'round'; g.lineJoin = 'round';
   for (var i = 1; i < pts.length; i++) {
-    g.strokeStyle = dvs ? couleurDelta((dvs[i - 1] + dvs[i]) / 2) : couleur((pts[i - 1].kmh + pts[i].kmh) / 2, vmin, vmax);
+    if (smartOn && smartSectionVue && smartSectionVue.i0 != null) {   // [v66] une seule section en couleur
+      var dedans = i >= smartSectionVue.i0 && i <= smartSectionVue.i1;
+      g.strokeStyle = dedans ? smartSectionVue.couleur : 'rgba(150,150,150,0.55)';
+      g.lineWidth = dedans ? 5 : 3;
+    } else g.strokeStyle = dvs ? couleurDelta((dvs[i - 1] + dvs[i]) / 2) : couleur((pts[i - 1].kmh + pts[i].kmh) / 2, vmin, vmax);
     g.beginPath(); g.moveTo(X(pts[i - 1].dx, pts[i - 1].dy), Y(pts[i - 1].dx, pts[i - 1].dy)); g.lineTo(X(pts[i].dx, pts[i].dy), Y(pts[i].dx, pts[i].dy)); g.stroke();
   }
   g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.arc(X(pts[0].dx, pts[0].dy), Y(pts[0].dx, pts[0].dy), 5, 0, Math.PI * 2); g.fill(); g.stroke();
@@ -1403,6 +1419,8 @@ function dessiner(v, lap) {
   proj = { cx: cx, cy: cy, uc: uc, vc: vc, theta: theta, s: s, w: w, h: h, lap: lap, cle: cle, X: X, Y: Y, pts: pts };
   var t = v.traces[lap.num], manque = t ? t.nb - t.parts.filter(function (p) { return p; }).length : 0;
   lg.textContent = (dvs ? 'Delta de vitesse vs #' + lapNumAff(compRef) + ' : vert = plus vite, rouge = moins vite, gris = pareil (±10 km/h). ' : 'Vert = lent, rouge = rapide (' + Math.round(vmin) + ' a ' + Math.round(vmax) + ' km/h). ') + pts.length + ' points' + (manque > 0 ? ' — ' + manque + ' morceau(x) manquant(s).' : '') + (carte.zoom !== 1 ? ' · zoom ×' + carte.zoom.toFixed(1) : '');
+  if (smartOn && smartSectionVue && smartSectionVue.i0 != null)
+    lg.textContent = 'Mode smart : seule la section dont parle la bande est en couleur. ' + pts.length + ' points';
   if (satVoulu && cle && !satOk) satPlanifier(lap, cle);
 }
 function satBascule() { satVoulu = document.getElementById('satOn').checked; try { localStorage.setItem('mt_sat', satVoulu ? '1' : '0'); } catch (e) {} rendre(); }
@@ -1535,8 +1553,8 @@ var circVue = null;   // l'axe et les bornes du tour AFFICHE, en metres du reper
 function csvLignes(t) { return t.split(/\r?\n/).filter(function (l) { return l.length && l[0] !== '#'; }); }
 function csvChamps(l) { var out = [], cur = '', q = false; for (var i = 0; i < l.length; i++) { var c = l[i]; if (c === '"') { q = !q; } else if (c === ',' && !q) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; }
 function circuitsCharger() {
-  Promise.all([fetch('./circuits_index.csv').then(function (r) { if (!r.ok) throw new Error('index ' + r.status); return r.text(); }),
-               fetch('./circuits_offsets.csv').then(function (r) { if (!r.ok) throw new Error('offsets ' + r.status); return r.text(); })])
+  Promise.all([fetch('../circuits_index.csv').then(function (r) { if (!r.ok) throw new Error('index ' + r.status); return r.text(); }),
+               fetch('../circuits_offsets.csv').then(function (r) { if (!r.ok) throw new Error('offsets ' + r.status); return r.text(); })])
   .then(function (tx) {
     var li = csvLignes(tx[0]), lo = csvLignes(tx[1]);
     var hi = csvChamps(li[0]), ho = csvChamps(lo[0]);
@@ -1626,6 +1644,7 @@ function secteursCalculer(lap, pts, m, N, intervalMs, bornesM) {   // [v44] born
 function circuitRendre(v, lap) {
   var bloc = document.getElementById('circBloc'); bloc.style.display = 'none'; circVue = null;
   var bande = document.getElementById('smartBande'); bande.style.display = 'none';   // [v47]
+  smartSectionVue = null;   // [v66]
   { var ref0 = compReference(v, lap), ci0 = document.getElementById('compInfo');
     if (!ref0) ci0.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
     else ci0.innerHTML = 'vs <b>#' + lapNumAff(ref0) + '</b> (' + duree(ref0.dureeMs) + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref0.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref0.dureeMs) + '</b>' : ''); }
@@ -1695,9 +1714,7 @@ function circuitRendre(v, lap) {
                      : (x - mb <= 0 ? '<span style="color:var(--ok)">' : '') + ecartTexte(x - mb) + (x - mb <= 0 ? '</span>' : ''))
           : '\u2014') + '</td><td class="small">' + (meilleurNum && meilleurNum[i] != null ? '#' + lapNumAff(v.laps[meilleurNum[i]]) : '') + '</td>'
       + (smartOn ? '<td class="small">' + (horsCeTour ? '<span style="opacity:.6">hors analyse</span>'
-        : (decal[i] != null && Math.abs(decal[i]) >= 3
-          ? 'trajectoire décalée de ' + Math.abs(decal[i]).toFixed(1).replace('.', ',') + ' m (dépassement ?)'
-          : smartPourquoi(x, mb, stats && stats[i], meilleurStats && meilleurStats[i], dr, refStats && refStats[i]))) + '</td>' : '') + '</tr>';
+        : pourquoiTxt(smartPourquoi(x, mb, stats && stats[i], meilleurStats && meilleurStats[i], dr, refStats && refStats[i]), decal[i])) + '</td>' : '') + '</tr>';
   });
   document.getElementById('tSect').innerHTML = h;
   // [v44] le tour ideal et la phrase qui dit ou est le temps
@@ -1723,9 +1740,12 @@ function circuitRendre(v, lap) {
       var nomP = (bornesV ? 'S' : 'P') + (pireI + 1);
       var motBande = (cause && cause !== 'pilotage') ? cause : (conseil || 'pilotage');
       var dec = decal[pireI];
-      if (dec != null && Math.abs(dec) >= 3) motBande = 'trajectoire décalée de ' + Math.abs(dec).toFixed(1).replace('.', ',') + ' m (dépassement ?)';
-      bande.textContent = nomP + ' · perd ' + (pire / 1000).toFixed(2).replace('.', ',') + ' s · ' + motBande;
-      bande.style.background = /dépassement/.test(motBande) ? '#6b4ea8' : (/mécanique/.test(motBande) ? 'var(--warn)' : (cause === 'levé de pied' ? '#c47f1b' : '#8a6d1f'));
+      var dclB = decalTexte(dec);   // [v67]
+      if (dclB) motBande = (motBande === 'pilotage') ? dclB : motBande + ' · ' + dclB;
+      bande.textContent = nomP + ' · ' + tempsSect(pire) + ' · ' + motBande;
+      var coulB = /mécanique/.test(motBande) ? 'var(--warn)' : (cause === 'levé de pied' ? '#c47f1b' : '#8a6d1f');
+      bande.style.background = coulB;
+      smartSectionVue = { i: pireI, couleur: /mécanique/.test(motBande) ? '#c0392b' : (cause === 'levé de pied' ? '#c47f1b' : '#b08a20') };
       bande.style.display = '';
       txt += (txt ? ' · ' : '') + '<b>' + ((bornesV ? 'S' : 'P') + (pireI + 1)) + '</b> fait <b>perdre ' + (pire / 1000).toFixed(2).replace('.', ',') + ' s</b>'
            + (motBande ? ' · ' + motBande : '')   // [v65] la phrase dit la meme chose que la bande
@@ -1736,8 +1756,11 @@ function circuitRendre(v, lap) {
       var iD = -1, dMax = 0;
       decal.forEach(function (d2, i) { if (d2 != null && Math.abs(d2) > Math.abs(dMax)) { dMax = d2; iD = i; } });
       if (iD >= 0 && Math.abs(dMax) >= 3) {
-        bande.textContent = ((bornesV ? 'S' : 'P') + (iD + 1)) + ' · trajectoire décalée de ' + Math.abs(dMax).toFixed(1).replace('.', ',') + ' m (dépassement ?)';
-        bande.style.background = '#6b4ea8'; bande.style.display = '';
+        var dTD = (meilleurs && res.sect[iD] != null && meilleurs[iD] != null) ? res.sect[iD] - meilleurs[iD] : null;   // [v67]
+        var gainD = dTD != null && dTD < -100;
+        bande.textContent = ((bornesV ? 'S' : 'P') + (iD + 1)) + ' · ' + (dTD != null ? tempsSect(dTD) + ' · ' : '') + decalTexte(dMax);
+        bande.style.background = gainD ? 'var(--ok)' : '#8a6d1f'; bande.style.display = '';
+        smartSectionVue = { i: iD, couleur: gainD ? '#1c8f4a' : '#b08a20' };
       }
     }
     if (!horsCeTour && bande.style.display === 'none' && meilleurs && stats) {   // [v62] rien de perdu : on dit le gain
@@ -1749,15 +1772,22 @@ function circuitRendre(v, lap) {
       if (meilleureI >= 0) {
         var nomG = (bornesV ? 'S' : 'P') + (meilleureI + 1);
         var conseilG = meilleurStats && meilleurStats[meilleureI] ? smartConseil(gainMax, stats[meilleureI], meilleurStats[meilleureI]) : '';
-        bande.textContent = gainMax < -100 ? nomG + ' · gagne ' + (-gainMax / 1000).toFixed(2).replace('.', ',') + ' s' + (conseilG ? ' · ' + conseilG : '')
+        bande.textContent = gainMax < -100 ? nomG + ' · ' + tempsSect(gainMax) + (conseilG ? ' · ' + conseilG : '')
                                            : 'tour au niveau du meilleur de la journée';
         bande.style.background = 'var(--ok)';
         bande.style.display = '';
+        if (gainMax < -100) smartSectionVue = { i: meilleureI, couleur: '#1c8f4a' };   // [v66] la section gagnee
       }
     }
     var hs = horsAnalyse(v, lap);
     if (hs) txt += (txt ? ' · ' : '') + '<span class="small">ce tour est hors analyse (' + hs + ')</span>';
     ph.innerHTML = txt || '<span class="small">Pas encore assez de tours comparables pour une analyse.</span>';
+  }
+  if (smartSectionVue && res.r) {   // [v66] les points de cette section
+    var j0 = smartSectionVue.i, b0 = j0 === 0 ? 0 : res.bornes[j0 - 1], b1 = j0 < res.bornes.length ? res.bornes[j0] : res.L;
+    var i0 = -1, i1 = -1;
+    for (var ii = 0; ii < res.r.length; ii++) { if (res.r[ii] >= b0 && res.r[ii] <= b1) { if (i0 < 0) i0 = ii; i1 = ii; } }
+    if (i0 < 0) smartSectionVue = null; else { smartSectionVue.i0 = i0; smartSectionVue.i1 = i1; }
   }
   var ci = document.getElementById('compInfo');
   if (!ref) ci.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
