@@ -120,7 +120,6 @@
       <div class="row" style="justify-content:space-between">
         <label class="small"><input type="checkbox" id="partOn" checked onchange="partiellesBascule()"> Partielles</label>
         <div style="margin-left:auto;text-align:right"><b id="circNom"></b> <span class="small" id="circInfo"></span></div>
-        <label class="small" id="circNLabel" style="margin-left:10px"><select id="circN" onchange="secteursChoisir()"><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></label>
       </div>
       <div id="partBloc"><table id="tSect" style="margin-top:6px"></table>
       <div class="small" id="circNote"></div></div>
@@ -171,7 +170,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v27';
+var PAGE_VER = 'MT v28';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -976,7 +975,7 @@ function traceCsv() {
 // celui du module (precis) ; les partielles ont la precision de la trace
 // (un point toutes les ~0,3 a 0,7 s, donc a quelques dixiemes pres).
 var circuits = null, circErreur = '';
-var secteursN = 3;
+var secteursN = 3;   // [v28] le decoupage de l'axe ; plus de selecteur a l'ecran
 var circVue = null;   // l'axe et les bornes du tour AFFICHE, en metres du repere du tour (pas garde en memoire locale)
 function csvLignes(t) { return t.split(/\r?\n/).filter(function (l) { return l.length && l[0] !== '#'; }); }
 function csvChamps(l) { var out = [], cur = '', q = false; for (var i = 0; i < l.length; i++) { var c = l[i]; if (c === '"') { q = !q; } else if (c === ',' && !q) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; }
@@ -1052,7 +1051,6 @@ function secteursCalculer(lap, pts, m, N, intervalMs) {
   for (var q2 = 0; q2 < N; q2++) { var fin = q2 < N - 1 ? tB[q2] : total; sect.push(fin != null && prev != null ? fin - prev : null); prev = fin; }
   return { sect: sect, bornes: bornes, sensPos: sensPos, parcouru: r[n - 1], L: L };
 }
-function secteursChoisir() { secteursN = +document.getElementById('circN').value; try { localStorage.setItem('mt_sectN', secteursN); } catch (e) {} rendre(); }
 // le rendu du bloc, appele par rendre() ; rend aussi ce qu'il faut a la carte (bornes en metres du repere du tour)
 function circuitRendre(v, lap) {
   var bloc = document.getElementById('circBloc'); bloc.style.display = 'none'; circVue = null;
@@ -1092,7 +1090,7 @@ function circuitRendre(v, lap) {
   if (!ref) ci.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
   else ci.innerHTML = 'vs <b>#' + lapNumAff(ref) + '</b> (' + duree(ref.dureeMs) + ', ' + (compMode === 'meilleur' ? 'meilleur de la session' : compMode === 'jour' ? 'meilleur de la journée' : 'précédent') + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref.dureeMs) + '</b>' : '')
       + (refSect ? ' · gagne ' + (gagne.length ? gagne.join(' ') : '\u2014') + ', perd ' + (perd.length ? perd.join(' ') : '\u2014') : '');
-  document.getElementById('partBloc').style.display = partiellesOn ? '' : 'none'; document.getElementById('circNLabel').style.display = partiellesOn ? '' : 'none';
+  document.getElementById('partBloc').style.display = partiellesOn ? '' : 'none';
   document.getElementById('circNote').textContent = 'Bornes à ' + Math.round(res.L / secteursN) + ' m depuis la ligne du tour, dans le sens de roulage (' + (res.sensPos ? m.c.sens : (m.c.sens === 'horaire' ? 'antihoraire' : 'horaire')) + '). Précision : celle de la trace (un point / ' + tr.intervalMs + ' ms).';
   // les bornes pour la carte : abscisse -> point de l'axe -> repere du tour
   var bornes = [];
@@ -1142,7 +1140,7 @@ try { satVoulu = localStorage.getItem('mt_sat') === '1'; document.getElementById
 document.querySelector('input[name=orient][value=' + carte.mode + ']').checked = true;
 try { details = localStorage.getItem('mt_details') === '1'; } catch (e) {}
 document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails';
-try { secteursN = +(localStorage.getItem('mt_sectN') || 3) || 3; partiellesOn = localStorage.getItem('mt_part') !== '0'; valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode; document.getElementById('circN').value = secteursN; document.getElementById('partOn').checked = partiellesOn;
+try { partiellesOn = localStorage.getItem('mt_part') !== '0'; valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode; document.getElementById('partOn').checked = partiellesOn;
 circuitsCharger();
 rendre();
 setInterval(function () { rendre(); memoireEtat(); }, 10000);   // « vu il y a … », le point de portee, la memoire
