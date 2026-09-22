@@ -248,7 +248,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v69';
+var PAGE_VER = 'MT v70';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -263,7 +263,7 @@ function refMot(lap, ref) {   // [v69] le mot juste pour la reference
   if (compMode === 'precedent') return 'précédent';
   var ou = compMode === 'jour' ? 'la journée' : 'la session';
   var mieux = lap.dureeMs != null && ref.dureeMs != null && lap.dureeMs < ref.dureeMs;
-  return mieux ? 'le meilleur des autres tours de ' + ou : 'meilleur de ' + ou;
+  return mieux ? '2ᵉ de ' + ou : 'meilleur de ' + ou;   // [v70] court : « meilleur » revenait quatre fois sur la ligne
 }
 function compReference(v, lap) {
   if (compMode === 'aucun') return null;
