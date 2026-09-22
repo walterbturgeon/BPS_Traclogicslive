@@ -256,7 +256,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v74';
+var PAGE_VER = 'MT v75';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1784,6 +1784,13 @@ function circuitRendre(v, lap) {
   var bloc = document.getElementById('circBloc'); bloc.style.display = 'none'; circVue = null;
   var bande = document.getElementById('smartBande'); bande.style.display = 'none';   // [v47]
   smartSectionVue = null;   // [v66]
+  // [v75] CE BLOC RESTE EN TETE. Il etait en fin de fonction, apres deux sorties : un tour sans
+  // circuit reconnu gardait donc l'habillage du mode smart, et la case « Partielles » restait
+  // cachee en sortant du smart. On ne pouvait plus la recocher.
+  document.getElementById('partBloc').style.display = (partiellesOn || smartOn) ? '' : 'none';
+  document.getElementById('tSect').style.display = (partiellesOn && !smartOn) ? '' : 'none';         // [v72]
+  document.getElementById('circNote').style.display = smartOn ? 'none' : '';                          // [v72]
+  document.getElementById('partOn').parentElement.style.display = smartOn ? 'none' : '';              // [v72]
   { var ref0 = compReference(v, lap), ci0 = document.getElementById('compInfo');
     if (!ref0) ci0.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
     else ci0.innerHTML = 'vs <b>#' + lapNumAff(ref0) + '</b> (' + duree(ref0.dureeMs) + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref0.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref0.dureeMs) + '</b>' : ''); }
@@ -1930,10 +1937,6 @@ function circuitRendre(v, lap) {
   if (!ref) ci.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
   else ci.innerHTML = 'vs <b>#' + lapNumAff(ref) + '</b> (' + duree(ref.dureeMs) + ', ' + refMot(lap, ref) + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref.dureeMs) + '</b>' : '')
       + (refSect ? ' · gagne ' + (gagne.length ? gagne.join(' ') : '\u2014') + ', perd ' + (perd.length ? perd.join(' ') : '\u2014') : '');
-  document.getElementById('partBloc').style.display = (partiellesOn || smartOn) ? '' : 'none';
-  document.getElementById('tSect').style.display = (partiellesOn && !smartOn) ? '' : 'none';         // [v72]
-  document.getElementById('circNote').style.display = smartOn ? 'none' : '';                          // [v72]
-  document.getElementById('partOn').parentElement.style.display = smartOn ? 'none' : '';              // [v72]
   document.getElementById('circNote').textContent = 'Bornes à ' + Math.round(res.L / secteursN) + ' m depuis la ligne du tour, dans le sens de roulage (' + (res.sensPos ? m.c.sens : (m.c.sens === 'horaire' ? 'antihoraire' : 'horaire')) + '). Précision : celle de la trace (un point / ' + tr.intervalMs + ' ms).';
   // les bornes pour la carte : abscisse -> point de l'axe -> repere du tour
   var bornes = [];
