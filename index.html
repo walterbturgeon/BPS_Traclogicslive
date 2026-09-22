@@ -257,7 +257,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v78';
+var PAGE_VER = 'MT v79';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -274,6 +274,26 @@ function refMot(lap, ref) {   // [v69] le mot juste pour la reference
   var mieux = lap.dureeMs != null && ref.dureeMs != null && lap.dureeMs < ref.dureeMs;
   return mieux ? '2ᵉ de ' + ou : 'meilleur de ' + ou;   // [v70] court : « meilleur » revenait quatre fois sur la ligne
 }
+var sensCache = {};   // [v79] mac|num|points -> +1 antihoraire, -1 horaire, 0 inconnu
+var sensDit = {};
+function sensTour(v, lap) {
+  var pts = traceEntiere(v.traces[lap.num]);
+  var cle = v.mac + '|' + lap.num + '|' + pts.length;
+  if (sensCache[cle] != null) return sensCache[cle];
+  var a = 0;
+  for (var i = 1; i < pts.length; i++) a += pts[i - 1].dx * pts[i].dy - pts[i].dx * pts[i - 1].dy;
+  var s = (pts.length < 20 || Math.abs(a) < 20000) ? 0 : (a > 0 ? 1 : -1);   // 20 000 m2 : une vraie boucle
+  sensCache[cle] = s;
+  lap.sensH = s === 0 ? null : (s < 0);   // le repere : vrai = sens horaire, nord en haut
+  return s;
+}
+function sensPareil(v, lap, autre) {   // [v79] deux tours comparables seulement dans le meme sens
+  var a = sensTour(v, lap), b = sensTour(v, autre);
+  if (!a || !b || a === b) return true;
+  var cle = v.mac + '|' + autre.num;
+  if (!sensDit[cle]) { sensDit[cle] = 1; jrn('Tour #' + lapNumAff(autre) + ' roule dans l autre sens : il ne sert pas de reference'); }
+  return false;
+}
 function compReference(v, lap) {
   if (compMode === 'aucun') return null;
   var laps = (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap)).filter(function (l) { return l.dureeMs != null && traceEntiere(v.traces[l.num]).length >= 10; });   // [v21] dans la session
@@ -284,6 +304,7 @@ function compReference(v, lap) {
     var fin = l.finUtc ? l.finUtc * 1000 : (l.recuMs || 0);
     return fin >= smartZeroMs;
   });
+  laps = laps.filter(function (l) { return l === lap || sensPareil(v, lap, l); });   // [v79]
   var i = laps.indexOf(lap);
   if (compMode === 'precedent') { for (var k = (i >= 0 ? i : laps.length) - 1; k >= 0; k--) if (laps[k] !== lap) return laps[k]; return null; }
   var best = null; laps.forEach(function (l) { if (l !== lap && (!best || l.dureeMs < best.dureeMs)) best = l; });
@@ -1834,6 +1855,7 @@ function circuitRendre(v, lap) {
   if (!res) { document.getElementById('tSect').innerHTML = ''; document.getElementById('circNote').textContent = 'Pas de base de temps dans la trace : partielles impossibles.'; return; }
   // le meilleur tour de cette voiture sur ce circuit, pour les ecarts
   var laps = smartOn ? smartVivier(v, lap) : (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap));   // [v50] la journee, moins ce qui precede la remise a zero
+  laps = laps.filter(function (l) { return l === lap || sensPareil(v, lap, l); });   // [v79] jamais l'autre sens
   var meilleurs = null, meilleurNum = null, meilleurStats = null;
   laps.forEach(function (l) {
     if (l.dureeMs == null) return; var p2 = traceEntiere(v.traces[l.num]); var m2 = circuitPourTour(l, p2); if (!m2 || m2.c.id !== m.c.id) return;
