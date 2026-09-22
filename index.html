@@ -8,9 +8,9 @@
 <link rel="icon" href="icon-mt-192.png" type="image/png"><link rel="apple-touch-icon" href="icon-mt-192.png">
 <meta name="theme-color" content="#111111">
 <style>
-  :root { --bg:#f7f7f7; --card:#fff; --ink:#111; --muted:#666; --line:#e2e2e2; --ok:#1c8f4a; --warn:#c0392b; --accent:#0a66c2; --tab:#eee; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#14171c; --card:#1d2128; --ink:#eee; --muted:#9aa; --line:#2c323b; --tab:#262b33; } }
-  :root[data-theme="dark"] { --bg:#14171c; --card:#1d2128; --ink:#eee; --muted:#9aa; --line:#2c323b; --tab:#262b33; }
+  :root { --bg:#f7f7f7; --card:#fff; --ink:#111; --muted:#666; --line:#e2e2e2; --ok:#1c8f4a; --warn:#c0392b; --accent:#0a66c2; --tab:#eee; --toile:#fafafa; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#14171c; --card:#1d2128; --ink:#eee; --muted:#9aa; --line:#2c323b; --tab:#262b33; --toile:#11151a; } }
+  :root[data-theme="dark"] { --bg:#14171c; --card:#1d2128; --ink:#eee; --muted:#9aa; --line:#2c323b; --tab:#262b33; --toile:#11151a; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:16px; }
   header { padding:12px 16px 8px; display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
@@ -48,8 +48,8 @@
   details.session summary .small { font-weight:400; }
   .grand { font-size:2em; font-weight:600; font-variant-numeric:tabular-nums; }
   .grille { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
-  canvas { width:100%; border-radius:10px; display:block; background:#fafafa; }
-  @media (prefers-color-scheme: dark) { canvas { background:#11151a; } }
+  /* [v25] le fond de la carte suit le theme CHOISI, pas seulement celui du systeme */
+  canvas { width:100%; border-radius:10px; display:block; background:var(--toile); }
   .jrn { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.78em; white-space:pre-wrap; max-height:200px; overflow:auto; color:var(--muted); }
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.8em; background:var(--tab); }
   .badge.ok { background:var(--ok); color:#fff; }
@@ -69,6 +69,7 @@
   <div class="row">
     <button class="btn" id="btnConn" onclick="connecter()">Connecter le collecteur</button>
     <span id="etat" class="small">Pas connecté.</span>
+    <button class="btn sec" id="btnTheme" onclick="themeSuivant()" title="Thème clair, sombre ou automatique" style="margin-left:auto">Thème</button>
   </div>
   <div class="small" id="collInfo" style="margin-top:6px"></div>
 </div>
@@ -154,7 +155,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v24';
+var PAGE_VER = 'MT v25';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -194,6 +195,24 @@ var partiellesOn = true;
 function partiellesBascule() { partiellesOn = document.getElementById('partOn').checked; try { localStorage.setItem('mt_part', partiellesOn ? '1' : '0'); } catch (e) {} rendre(); }
 // [v8] les details techniques (MAC, firmware) sont masques par defaut ; le bouton en bas de page les montre
 var details = false;
+// [v25] LE THEME. `auto` suit le reglage de la tablette (media prefers-color-scheme) ; `clair` et
+// `sombre` forcent, par l'attribut data-theme que les deux blocs :root lisent deja. Le choix est
+// garde par appareil (localStorage), et la couleur de la barre du navigateur suit.
+var THEMES = ['auto', 'clair', 'sombre'], theme = 'auto';
+function themePoser() {
+  var r = document.documentElement;
+  if (theme === 'auto') r.removeAttribute('data-theme'); else r.setAttribute('data-theme', theme === 'clair' ? 'light' : 'dark');
+  var b = document.getElementById('btnTheme');
+  if (b) b.textContent = theme === 'auto' ? 'Thème : auto' : theme === 'clair' ? 'Thème : clair' : 'Thème : sombre';
+  var sombre = theme === 'sombre' || (theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', sombre ? '#14171c' : '#f7f7f7');
+  if (vueMac && vueTour != null) rendre();
+}
+function themeSuivant() {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  try { localStorage.setItem('mt_theme', theme); } catch (e) {}
+  themePoser();
+}
 function detailsBascule() { details = !details; try { localStorage.setItem('mt_details', details ? '1' : '0'); } catch (e) {} document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails'; rendre(); }
 var RL_SVC = 'b3d5a900-1a2b-4c3d-9e0f-56789abcdef0';
 var RL_DATA = 'b3d5a901-1a2b-4c3d-9e0f-56789abcdef0';
@@ -1097,6 +1116,10 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', function () { if (recharge) return; recharge = true; jrn('Nouvelle version : rechargement.'); setTimeout(function () { location.reload(); }, 500); });
 }
 
+try { theme = localStorage.getItem('mt_theme') || 'auto'; } catch (e) {}
+if (THEMES.indexOf(theme) < 0) theme = 'auto';
+themePoser();
+if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { if (theme === 'auto') themePoser(); });
 document.getElementById('pageVer').textContent = 'page ' + PAGE_VER;
 charger();
 try { satVoulu = localStorage.getItem('mt_sat') === '1'; document.getElementById('satOn').checked = satVoulu; carte.mode = localStorage.getItem('mt_orient') === 'nord' ? 'nord' : 'max'; } catch (e) {}
