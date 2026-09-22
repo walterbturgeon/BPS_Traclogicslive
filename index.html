@@ -85,6 +85,9 @@
   #smartVu.on { background:var(--accent); color:#fff; border-color:var(--accent); }
   .bande { display:inline-block; vertical-align:middle; margin-left:10px; padding:5px 12px; border-radius:999px;
            font-size:.8em; font-weight:600; color:#fff; letter-spacing:.01em; }
+  /* [v83] LA BOITE DE VERDICT NE VIT QUE SOUS LA CARTE. Celle du haut reste dans la page : elle
+     porte le texte et la couleur que la boite du bas recopie. Elle ne s'affiche simplement plus. */
+  #smartBande { display:none !important; }
   .pastille { width:16px; height:16px; padding:0; border-radius:50%; border:2px solid var(--muted); background:transparent; cursor:pointer; vertical-align:middle; margin-right:8px; }
   .pastille.on { border-color:transparent; }
   .jour { font-weight:600; margin:14px 0 4px; padding-bottom:4px; border-bottom:2px solid var(--line); }
@@ -258,7 +261,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v82';
+var PAGE_VER = 'MT v83';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
