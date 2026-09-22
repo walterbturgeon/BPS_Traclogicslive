@@ -172,7 +172,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v31';
+var PAGE_VER = 'MT v32';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -446,6 +446,14 @@ function canResume(lap, ech, k) {
   var mn = null, mx = null, som = 0, n = 0, sMax = -1;
   for (var sec = 0; sec < ech.length; sec++) { var x = canValeur(lap, ech, k, sec); if (x == null) continue; if (mn == null || x < mn) mn = x; if (mx == null || x > mx) { mx = x; sMax = sec; } som += x; n++; }
   return n ? { min: mn, max: mx, moy: som / n, n: n, sMax: sMax } : null;
+}
+// [v32] la valeur reelle d'un canal a l'instant t (ms depuis le depart du tour)
+function canValeurA(lap, ech, k, tMs) {
+  var x = tMs / 1000, a = Math.floor(x), b = a + 1, va = canValeur(lap, ech, k, a), vb = canValeur(lap, ech, k, b);
+  if (va == null && vb == null) return null;
+  if (va == null) return vb;
+  if (vb == null) return va;
+  return va + (vb - va) * (x - a);
 }
 // la position sur la trace a l'instant t (ms depuis le depart), par interpolation
 function positionA(pts, intervalMs, tMs) {
@@ -855,10 +863,23 @@ function dessiner(v, lap) {
     var pv = pts[pointVu], px = X(pv.dx, pv.dy), py = Y(pv.dx, pv.dy);
     g.save();
     g.beginPath(); g.arc(px, py, 9, 0, Math.PI * 2); g.strokeStyle = '#fff'; g.lineWidth = 3; g.stroke(); g.strokeStyle = '#000'; g.lineWidth = 1; g.stroke();
-    var txt = pv.kmh + ' km/h' + (dvs ? ' (' + (dvs[pointVu] >= 0 ? '+' : '') + dvs[pointVu].toFixed(0) + ')' : ''); g.font = 'bold 14px system-ui'; var tw = g.measureText(txt).width;
-    var bx = Math.min(w - tw - 16, Math.max(4, px - tw / 2 - 6)), by = py - 34 < 4 ? py + 14 : py - 34;
-    g.fillStyle = 'rgba(0,0,0,0.75)'; g.beginPath(); g.roundRect(bx, by, tw + 12, 22, 6); g.fill();
-    g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(txt, bx + 6, by + 11);
+    // [v32] sous la vitesse, les canaux CHOISIS (pastille allumee) a CE point du tour
+    var txt = pv.kmh + ' km/h' + (dvs ? ' (' + (dvs[pointVu] >= 0 ? '+' : '') + dvs[pointVu].toFixed(0) + ')' : '');
+    var trV = v.traces[lap.num], tMs = pointVu * ((trV && trV.intervalMs) || 500), echV = canEchantillons(lap), lignes = [];
+    if (valeursOn && lap.can) for (var kv = 0; kv < 8; kv++) {
+      if (!canMontre[kv]) continue;
+      var xv = canValeurA(lap, echV, kv, tMs); if (xv == null) continue;
+      var cv = lap.cat && lap.cat.ch[kv];
+      lignes.push({ k: kv, txt: ((cv && cv.nom) || ('p' + (kv + 1))).slice(0, 14) + ' ' + xv.toFixed(Math.abs(xv) >= 100 ? 0 : 1) + (cv && cv.unite ? ' ' + cv.unite : '') });
+    }
+    g.font = 'bold 14px system-ui'; var tw = g.measureText(txt).width;
+    g.font = '12px system-ui'; lignes.forEach(function (l) { tw = Math.max(tw, g.measureText(l.txt).width); });
+    var hb = 22 + lignes.length * 15;
+    var bx = Math.min(w - tw - 16, Math.max(4, px - tw / 2 - 6)), by = py - 12 - hb < 4 ? py + 14 : py - 12 - hb;
+    g.fillStyle = 'rgba(0,0,0,0.78)'; g.beginPath(); g.roundRect(bx, by, tw + 12, hb, 6); g.fill();
+    g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.font = 'bold 14px system-ui'; g.fillText(txt, bx + 6, by + 12);
+    g.font = '12px system-ui';
+    lignes.forEach(function (l, i) { g.fillStyle = CAN_COULEURS[l.k]; g.fillText(l.txt, bx + 6, by + 27 + i * 15); });
     g.restore();
   }
   proj = { cx: cx, cy: cy, uc: uc, vc: vc, theta: theta, s: s, w: w, h: h, lap: lap, cle: cle, X: X, Y: Y, pts: pts };
