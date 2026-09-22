@@ -118,6 +118,7 @@
       <div><div class="small">Temps</div><div class="grand" id="tTemps"></div></div>
       <div><div class="small">Écart vs précédent</div><div class="grand" id="tEcart"></div></div>
       <div><div class="small">Écart vs meilleur (session)</div><div class="grand" id="tBest"></div></div>
+      <div id="meteoCase" style="display:none"><div class="small">Météo au circuit</div><div class="grand" id="tMeteo" style="font-size:1.35em"></div><div class="small" id="tMeteoSous"></div></div>
     </div>
     <div class="small" id="tSrc" style="margin-top:6px"></div>
     <div class="row" style="margin-top:8px"><label class="small">Comparer à <select id="compSel" onchange="compChoisir()"><option value="meilleur">meilleur tour de la session</option><option value="jour">meilleur tour de la journée</option><option value="precedent">tour précédent</option><option value="aucun">rien (vitesse)</option></select></label> <span class="small" id="compInfo"></span></div>
@@ -177,7 +178,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v36';
+var PAGE_VER = 'MT v37';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -481,6 +482,24 @@ function positionA(pts, intervalMs, tMs) {
   var f = tMs / intervalMs, i = Math.floor(f); if (i < 0) return pts[0]; if (i >= pts.length - 1) return pts[pts.length - 1];
   var a = pts[i], b = pts[i + 1], u = f - i; return { dx: a.dx + u * (b.dx - a.dx), dy: a.dy + u * (b.dy - a.dy) };
 }
+var meteoCache = {}, meteoEnCours = {};
+function meteoCle(lat, lon) { return (Math.round(lat * 20) / 20).toFixed(2) + ',' + (Math.round(lon * 20) / 20).toFixed(2); }
+function meteoDemander(lat, lon) {
+  var cle = meteoCle(lat, lon), m = meteoCache[cle];
+  if (m && Date.now() - m.t < 600000) return m;
+  if (meteoEnCours[cle]) return m || null;
+  meteoEnCours[cle] = true;
+  var u = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat.toFixed(3) + '&longitude=' + lon.toFixed(3)
+        + '&current=temperature_2m,precipitation&hourly=precipitation&past_hours=1&forecast_hours=1&timezone=auto';
+  fetch(u).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    meteoEnCours[cle] = false;
+    if (!j || !j.current) return;
+    var pluie = 0; if (j.hourly && j.hourly.precipitation) j.hourly.precipitation.forEach(function (x) { if (x != null) pluie += x; });
+    meteoCache[cle] = { t: Date.now(), degres: j.current.temperature_2m, pluie: pluie };
+    if (vueMac && vueTour != null) rendre();
+  }).catch(function () { meteoEnCours[cle] = false; });   // sans Internet : rien, et pas un mot
+  return m || null;
+}
 var CAN_COULEURS = ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#00c7be', '#007aff', '#af52de', '#ff2d55'];
 // [v31] ce que la carte montre : un MAX par canal, au choix. Garde par appareil.
 var canMontre = [true, true, true, true, true, true, true, true];
@@ -684,6 +703,15 @@ function rendre0() {
   document.getElementById('tTemps').textContent = duree(lap.dureeMs);
   document.getElementById('tEcart').textContent = prec && prec.dureeMs != null && lap.dureeMs != null ? ecartTexte(lap.dureeMs - prec.dureeMs) : '—';
   document.getElementById('tBest').textContent = best && lap.dureeMs != null ? (lap === best ? 'meilleur' : ecartTexte(lap.dureeMs - best.dureeMs)) : '—';
+  // [v37] la meteo au circuit : la case n'existe que si une reponse est arrivee
+  var mc = document.getElementById('meteoCase'), mt = null;
+  if (lap.oLat != null && !(Math.abs(lap.oLat) < 1e-4 && Math.abs(lap.oLon) < 1e-4)) mt = meteoDemander(lap.oLat, lap.oLon);
+  mc.style.display = mt ? '' : 'none';
+  if (mt) {
+    document.getElementById('tMeteo').textContent = Math.round(mt.degres) + ' °C · ' + mt.pluie.toFixed(1).replace('.', ',') + ' mm';
+    var vieux = lap.finUtc ? Math.round((Date.now() / 1000 - lap.finUtc) / 3600) : 0;
+    document.getElementById('tMeteoSous').textContent = 'pluie de la dernière heure' + (vieux >= 3 ? ' · relevée maintenant, le tour a ' + vieux + ' h' : '');
+  }
   var av = document.getElementById('tSrc');
   av.textContent = lap.dureeMs == null ? '\u26a0 Resume du tour pas encore recu (valeurs ou trace seulement).' : '';
   av.style.display = lap.dureeMs == null ? '' : 'none';
