@@ -108,22 +108,14 @@
   <h1>TRACLOGICS Live</h1>
   <span class="ver" id="pageVer">page MT v1</span>
   <button id="smartVu" onclick="reglagesBascule()" aria-label="Mode smart actif" title="Mode smart actif — toucher pour ouvrir les réglages">
-    <svg width="28" height="28" viewBox="0 0 34 30" aria-hidden="true">
-      <g fill="currentColor">
-        <path d="M16.4 2.4c-4.6 0-8.4 2.3-10.4 5.9-2.6.9-4.3 3.2-4.3 5.9 0 1.7.7 3.3 1.9 4.5-.2 2.6 1.4 5 4 5.9.4 2.1 2.2 3.7 4.5 3.9l8.1.6c.9.1 1.6-.7 1.4-1.5l-.9-4.2c1.9-.6 3.2-2.3 3.2-4.2 2.4-.7 4-2.9 4-5.4 0-.6-.1-1.2-.3-1.8 1.3-1.2 1.8-3 1.2-4.7-.7-2-2.7-3.3-4.8-3.1-1.6-1.6-4-2.5-6.6-2.6z"/>
-        <circle cx="26.2" cy="21.6" r="3.9"/><circle cx="29.4" cy="19.6" r="2.7"/>
-        <path d="M22.6 24.8h3.8c-.2 2.4-1.2 4-3 4.8h-3.4c1.6-1.2 2.5-2.8 2.6-4.8z"/>
-      </g>
-      <g fill="none" stroke="var(--accent)" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M6.6 7.4c2.4 1.6 4.6 1.1 6.6-1.4"/>
-        <path d="M3.0 13.0c3.2 2.0 6.0 1.3 8.4-2.0"/>
-        <path d="M4.2 19.4c3.0 1.8 5.6 1.1 7.8-2.0"/>
-        <path d="M9.0 24.0c2.2 1.1 4.2.6 5.9-1.6"/>
-        <path d="M17.6 5.6c2.0 2.2 4.2 2.8 6.6 1.8"/>
-        <path d="M16.8 12.2c2.6 2.4 5.3 2.8 8.0 1.2"/>
-        <path d="M16.2 18.8c2.2 1.9 4.4 2.2 6.6 1.0"/>
-        <path d="M24.0 20.0c1.4.9 2.9.9 4.4 0"/>
-      </g>
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M9.1 6.1c1-2.4 3.4-3.9 6-3.7 3.7.3 6.5 3.4 6.3 7.1-.1 1.9-.8 3.3-1.7 4.6-.5.8-.8 1.7-.8 2.6v5.1"/>
+      <path d="M9.1 6.1c-.8 1.6-1.8 3.2-2.8 4.6-.5.7-.4 1.3.4 1.5l1.6.4c.4.1.6.4.6.8l.1 2.3c0 1 .8 1.7 1.8 1.7h3c1 0 1.7-.7 1.7-1.7"/>
+      <path d="M11.4 12.2a1.8 1.8 0 0 1 .4-3.3 1.9 1.9 0 0 1 3-1.5 1.8 1.8 0 0 1 2.8.7 1.8 1.8 0 0 1 1.3 2.7 1.7 1.7 0 0 1-.7 2.7"/>
+      <path d="M11.4 12.2h3.6"/>
+      <path d="M13.9 10.1a1 1 0 0 1 1.7.7"/>
+      <path d="M17.2 13.5c1 .4 1.3 1.6.6 2.4-.4.5-1 .7-1.6.6v5.3"/>
     </svg></button>
   <span class="badge" id="majBadge" style="display:none">mise à jour…</span>
 </header>
@@ -255,7 +247,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v57';
+var PAGE_VER = 'MT v58';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
