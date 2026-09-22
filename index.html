@@ -229,8 +229,9 @@
       <span class="small" id="satEtat"></span>
     </div>
     <canvas id="carte" height="10" style="touch-action:none"></canvas>
+    <div id="carteBande" style="display:none;margin-top:6px"><span class="bande" id="smartBandeBas" style="margin-left:0"></span></div>
     <div class="small" id="carteLeg"></div>
-    <div class="small">Vue libre : un doigt déplace, deux doigts zooment et tournent, double toucher recadre. Vue verrouillée : un doigt sur le tracé montre la vitesse à ce point.</div>
+    <div class="small" id="carteAide">Vue libre : un doigt déplace, deux doigts zooment et tournent, double toucher recadre. Vue verrouillée : un doigt sur le tracé montre la vitesse à ce point.</div>
   </div>
 
   <div class="card">
@@ -257,7 +258,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v80';
+var PAGE_VER = 'MT v81';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1584,7 +1585,14 @@ function dessiner(v, lap) {
   var t = v.traces[lap.num], manque = t ? t.nb - t.parts.filter(function (p) { return p; }).length : 0;
   lg.textContent = (dvs ? 'Delta de vitesse vs #' + lapNumAff(compRef) + ' : vert = plus vite, rouge = moins vite, gris = pareil (±10 km/h). ' : 'Vert = lent, rouge = rapide (' + Math.round(vmin) + ' a ' + Math.round(vmax) + ' km/h). ') + pts.length + ' points' + (manque > 0 ? ' — ' + manque + ' morceau(x) manquant(s).' : '') + (carte.zoom !== 1 ? ' · zoom ×' + carte.zoom.toFixed(1) : '');
   if (smartOn && smartSectionVue && smartSectionVue.i0 != null)
-    lg.textContent = 'Mode smart : seule la zone qui porte l\u2019ecart de la bande est en couleur. ' + pts.length + ' points';
+    lg.textContent = '';   // [v81] la bande dit tout ; la legende se tait en smart
+  {   // [v81] sous la carte : la bande en smart, le mode d'emploi en normal
+    var bh = document.getElementById('smartBande'), cb = document.getElementById('carteBande'), bb = document.getElementById('smartBandeBas');
+    var montreB = smartOn && bh && bh.style.display !== 'none' && bh.textContent;
+    if (montreB) { bb.textContent = bh.textContent; bb.style.background = bh.style.background; }
+    cb.style.display = montreB ? '' : 'none';
+    document.getElementById('carteAide').style.display = smartOn ? 'none' : '';
+  }
   if (satVoulu && cle && !satOk) satPlanifier(lap, cle);
 }
 function satBascule() {
