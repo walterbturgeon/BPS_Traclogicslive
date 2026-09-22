@@ -114,6 +114,10 @@
     <b>Réglages</b>
     <button class="btn sec" onclick="reglagesBascule()">Fermer</button>
   </div>
+  <div class="row" style="margin-bottom:10px">
+    <label class="small"><input type="checkbox" id="smartOn" onchange="smartBascule()"> <b>Mode smart</b></label>
+    <span class="small">Sections aux virages, tour idéal, cause d'une perte, tours hors analyse, météo voisine seulement.</span>
+  </div>
   <div class="row" style="margin-bottom:10px"><span class="small">Thème</span>
     <button class="btn sec icone" id="btnTheme" onclick="themeSuivant()" aria-label="Thème">◐</button>
     <span class="small" id="themeNom"></span></div>
@@ -169,6 +173,7 @@
         <div style="margin-left:auto;text-align:right"><b id="circNom"></b> <span class="small" id="circInfo"></span></div>
       </div>
       <div id="partBloc"><table id="tSect" style="margin-top:6px"></table>
+      <div class="small" id="smartPhrase" style="margin-top:6px;display:none"></div>
       <div class="small" id="circNote"></div></div>
     </div>
     <div class="row" style="margin:10px 0 6px">
@@ -203,7 +208,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v43';
+var PAGE_VER = 'MT v44';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -217,6 +222,7 @@ function compChoisir() { compMode = document.getElementById('compSel').value; tr
 function compReference(v, lap) {
   if (compMode === 'aucun') return null;
   var laps = (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap)).filter(function (l) { return l.dureeMs != null && traceEntiere(v.traces[l.num]).length >= 10; });   // [v21] dans la session
+  if (smartOn) laps = laps.filter(function (l) { return l === lap || (meteoCompatible(lap, l) && !horsAnalyse(v, l)); });   // [v44]
   var i = laps.indexOf(lap);
   if (compMode === 'precedent') { for (var k = (i >= 0 ? i : laps.length) - 1; k >= 0; k--) if (laps[k] !== lap) return laps[k]; return null; }
   var best = null; laps.forEach(function (l) { if (l !== lap && (!best || l.dureeMs < best.dureeMs)) best = l; });
@@ -544,6 +550,98 @@ function canValeurA(lap, ech, k, tMs) {
   if (vb == null) return va;
   return va + (vb - va) * (x - a);
 }
+// =====================================================================
+// [v44] LE MODE SMART -- l'analyse, pas l'affichage
+// =====================================================================
+// Cinq changements, choisis le 22 sept. 2026 : (1) les partielles suivent les VIRAGES du
+// circuit, pas trois tiers egaux ; (2) un TOUR IDEAL = la meilleure section de chaque tour ;
+// (3) une PHRASE qui dit ou est le temps ; (5) les tours de sortie de puits et les tours
+// genes sont marques HORS ANALYSE ; (7) la cause d'une perte est nommee.
+// ⚠ LA REGLE DE CAUSE VIENT DU PILOTE, pas de moi : la vitesse tombe et le papillon reste au
+// meme pourcentage -> la voiture ne repond plus (mecanique). La vitesse tombe AVEC le papillon
+// et le regime -> le pilote a leve : trafic ou volonte. Sans ces deux canaux, aucune cause.
+// ⚠ ON NE COMPARE QUE DES TOURS DE METEO VOISINE : 3 degres d'ecart au plus, et tous deux secs
+// ou tous deux mouilles. Un tour sous la pluie ne se compare pas a un tour au sec.
+var smartOn = false;
+var RE_GAZ = /throttle|papillon|tps/i, RE_RPM = /rpm|engine speed|regime/i;
+function smartBascule() {
+  smartOn = document.getElementById('smartOn').checked;
+  try { localStorage.setItem('mt_smart', smartOn ? '1' : '0'); } catch (e) {}
+  smartBornes = {}; rendre();
+}
+function smartCanal(lap, re) { if (!lap.cat) return -1; for (var k = 0; k < 8; k++) { var c = lap.cat.ch[k]; if (c && re.test(c.nom)) return k; } return -1; }
+function meteoCompatible(a, b) {
+  if (!a || !b || !a.meteo || !b.meteo) return true;   // sans releve, on ne refuse rien
+  if (Math.abs(a.meteo.degres - b.meteo.degres) > 3) return false;
+  return (a.meteo.pluie >= 0.2) === (b.meteo.pluie >= 0.2);
+}
+function horsAnalyse(v, lap) {
+  if (lap.dureeMs == null) return 'sans temps';
+  var sn = sessionDe(v, lap); if (!sn) return null;
+  if (sn.laps.length > 1 && sn.laps[0] === lap) return 'sortie des puits';
+  if (sn.best && lap !== sn.best && lap.dureeMs > sn.best.dureeMs * 1.10) return 'trafic ou roulage';
+  return null;
+}
+// les virages du circuit, lus dans le tour de reference : on coupe aux points LES PLUS RAPIDES,
+// pour qu'une section porte un virage entier (freinage, corde, sortie).
+var smartBornes = {};
+function smartVirages(v, ref, m) {
+  var cle = m.c.id + '|' + ref.num;
+  if (smartBornes[cle] !== undefined) return smartBornes[cle];
+  smartBornes[cle] = null;
+  var pr = traceEntiere(v.traces[ref.num]), mr = circuitPourTour(ref, pr);
+  if (!mr || mr.c.id !== m.c.id) return null;
+  var rr = secteursCalculer(ref, pr, mr, 1, v.traces[ref.num].intervalMs);
+  if (!rr || !rr.r) return null;
+  var r = rr.r, L = rr.L, n = pr.length;
+  var vit = [], somme = 0;
+  for (var i = 0; i < n; i++) { var a = pr[Math.max(0, i - 1)].kmh, b = pr[i].kmh, c = pr[Math.min(n - 1, i + 1)].kmh; vit.push((a + b + c) / 3); somme += pr[i].kmh; }
+  var moy = somme / n;
+  var creux = [];
+  for (var i2 = 2; i2 < n - 2; i2++) if (vit[i2] <= vit[i2 - 1] && vit[i2] <= vit[i2 + 1] && vit[i2] < moy * 0.92) {
+    if (creux.length && r[i2] - r[creux[creux.length - 1]] < 140) { if (vit[i2] < vit[creux[creux.length - 1]]) creux[creux.length - 1] = i2; }
+    else creux.push(i2);
+  }
+  if (creux.length < 2) return null;
+  if (creux.length > 12) {   // trop de virages : on garde les plus lents
+    creux = creux.slice().sort(function (x, y) { return vit[x] - vit[y]; }).slice(0, 12).sort(function (x, y) { return x - y; });
+  }
+  var bornes = [];
+  for (var q = 0; q < creux.length - 1; q++) {
+    var a2 = creux[q], b2 = creux[q + 1], mx = a2;
+    for (var i3 = a2; i3 <= b2; i3++) if (vit[i3] > vit[mx]) mx = i3;
+    if (r[mx] > 20 && r[mx] < L - 20) bornes.push(r[mx]);
+  }
+  bornes = bornes.filter(function (x, i4, t) { return i4 === 0 || x - t[i4 - 1] > 80; });
+  smartBornes[cle] = bornes.length ? bornes : null;
+  return smartBornes[cle];
+}
+// par section : vitesse minimale, papillon moyen, regime moyen
+function smartStats(lap, pts, res, trace) {
+  var ech = canEchantillons(lap), gaz = smartCanal(lap, RE_GAZ), rpm = smartCanal(lap, RE_RPM);
+  var N = res.sect.length, out = [];
+  for (var j = 0; j < N; j++) out.push({ kmhMin: null, sg: 0, ng: 0, sr: 0, nr: 0 });
+  for (var i = 0; i < pts.length; i++) {
+    var j2 = 0; while (j2 < res.bornes.length && res.r[i] >= res.bornes[j2]) j2++;
+    var o = out[Math.min(j2, N - 1)];
+    if (o.kmhMin == null || pts[i].kmh < o.kmhMin) o.kmhMin = pts[i].kmh;
+    var t = i * (trace.intervalMs || 500);
+    if (gaz >= 0) { var g = canValeurA(lap, ech, gaz, t); if (g != null) { o.sg += g; o.ng++; } }
+    if (rpm >= 0) { var q2 = canValeurA(lap, ech, rpm, t); if (q2 != null) { o.sr += q2; o.nr++; } }
+  }
+  out.forEach(function (o) { o.gaz = o.ng ? o.sg / o.ng : null; o.rpm = o.nr ? o.sr / o.nr : null; });
+  return out;
+}
+// la cause d'une section perdue, selon la regle du pilote
+function smartCause(dt, a, b) {
+  if (dt == null || dt < 300 || !a || !b) return '';
+  if (a.gaz == null || b.gaz == null) return '';            // sans papillon, aucune cause n'est dite
+  if (a.kmhMin != null && b.kmhMin != null && a.kmhMin >= b.kmhMin - 2) return 'pilotage';
+  var dg = a.gaz - b.gaz, dr = (a.rpm != null && b.rpm != null) ? a.rpm - b.rpm : null;
+  if (dg >= -2) return '⚠ mécanique ?';          // la vitesse tombe, le pied reste : la voiture ne rend plus
+  if (dr == null || dr < 0) return 'levé de pied';    // papillon ET regime en baisse : trafic ou volonte
+  return 'pilotage';
+}
 // la position sur la trace a l'instant t (ms depuis le depart), par interpolation
 function positionA(pts, intervalMs, tMs) {
   if (!pts.length || !intervalMs) return null;
@@ -767,7 +865,7 @@ function rendre0() {
     sn.laps.slice().reverse().forEach(function (l, j) {
       var prec = sn.laps[sn.laps.length - 2 - j] || null;
       hb += '<tr class="clic' + (l.num === vueTour ? ' sel' : '') + '" data-num="' + l.num + '"><td>#' + lapNumAff(l) + (sn.best && l === sn.best ? ' ★' : '') + '</td><td class="num">' + duree(l.dureeMs) + '</td><td class="num">'
-        + (prec && prec.dureeMs != null && l.dureeMs != null ? ecartTexte(l.dureeMs - prec.dureeMs) : '—') + '</td><td>' + source(l.source) + '</td><td class="num small">'
+        + (prec && prec.dureeMs != null && l.dureeMs != null ? ecartTexte(l.dureeMs - prec.dureeMs) : '—') + '</td><td>' + source(l.source) + (smartOn && horsAnalyse(v, l) ? ' <span class="small" style="opacity:.7">· hors analyse</span>' : '') + '</td><td class="num small">'
         + (l.finUtc ? new Date(l.finUtc * 1000).toTimeString().slice(0, 8) : l.recuMs ? new Date(l.recuMs).toTimeString().slice(0, 8) + ' (reçu)' : '') + '</td></tr>';
     });
     hb += '</tbody></table></details>';
@@ -1200,7 +1298,7 @@ function circuitPourTour(lap, pts) {
   return meilleur;
 }
 // les partielles : bornes a k x L/N depuis la ligne du tour, dans le sens de roulage
-function secteursCalculer(lap, pts, m, N, intervalMs) {
+function secteursCalculer(lap, pts, m, N, intervalMs, bornesM) {   // [v44] bornesM : des bornes choisies, sinon N parts egales
   var k = m.c, L = k.L, ss = m.ss, n = pts.length;
   if (!intervalMs || n < 10) return null;
   // sens : la majorite des pas d'abscisse (modulo L) sont-ils positifs ?
@@ -1211,16 +1309,18 @@ function secteursCalculer(lap, pts, m, N, intervalMs) {
   var r = [0], s0 = ss[0];
   for (var i2 = 1; i2 < n; i2++) { var dd = ss[i2] - ss[i2 - 1]; if (dd > L / 2) dd -= L; if (dd < -L / 2) dd += L; if (!sensPos) dd = -dd; r.push(Math.max(r[i2 - 1], r[i2 - 1] + dd)); }
   var t = function (i) { return i * intervalMs; };
+  var listeB = bornesM && bornesM.length ? bornesM : null;
+  if (listeB) N = listeB.length + 1;
   var bornes = [], tB = [];
   for (var q = 1; q < N; q++) {
-    var B = q * L / N, tb = null;
+    var B = listeB ? listeB[q - 1] : q * L / N, tb = null;
     for (var i3 = 1; i3 < n; i3++) if (r[i3] >= B && r[i3 - 1] < B) { var f = (B - r[i3 - 1]) / Math.max(r[i3] - r[i3 - 1], 1e-6); tb = t(i3 - 1) + f * (t(i3) - t(i3 - 1)); break; }
     bornes.push(B); tB.push(tb);
   }
   var total = lap.dureeMs != null ? lap.dureeMs : t(n - 1);
   var sect = [], prev = 0;
   for (var q2 = 0; q2 < N; q2++) { var fin = q2 < N - 1 ? tB[q2] : total; sect.push(fin != null && prev != null ? fin - prev : null); prev = fin; }
-  return { sect: sect, bornes: bornes, sensPos: sensPos, parcouru: r[n - 1], L: L };
+  return { sect: sect, bornes: bornes, sensPos: sensPos, parcouru: r[n - 1], L: L, r: r };   // [v44] r sert aux statistiques par secteur
 }
 // le rendu du bloc, appele par rendre() ; rend aussi ce qu'il faut a la carte (bornes en metres du repere du tour)
 function circuitRendre(v, lap) {
@@ -1231,7 +1331,11 @@ function circuitRendre(v, lap) {
   if (!circuits) { if (circErreur) document.getElementById('circNote').textContent = 'Base de circuits : ' + circErreur; return; }
   var pts = traceEntiere(v.traces[lap.num]), m = circuitPourTour(lap, pts);
   if (!m) return;
-  var tr = v.traces[lap.num], res = secteursCalculer(lap, pts, m, secteursN, tr.intervalMs);
+  var tr = v.traces[lap.num];
+  // [v44] en smart, les bornes suivent les virages, lus dans le tour de reference
+  var refB = smartOn ? (compReference(v, lap) || lap) : null;
+  var bornesV = refB ? smartVirages(v, refB, m) : null;
+  var res = secteursCalculer(lap, pts, m, secteursN, tr.intervalMs, bornesV);
   bloc.style.display = '';
   document.getElementById('circNom').textContent = m.c.nom;
   // [v29] la qualite de la reconnaissance (ecart median, couverture) ne sert qu'au diagnostic :
@@ -1246,23 +1350,49 @@ function circuitRendre(v, lap) {
   var laps = (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap)), meilleurs = null, meilleurNum = null;   // [v21] dans la session
   laps.forEach(function (l) {
     if (l.dureeMs == null) return; var p2 = traceEntiere(v.traces[l.num]); var m2 = circuitPourTour(l, p2); if (!m2 || m2.c.id !== m.c.id) return;
-    var r2 = secteursCalculer(l, p2, m2, secteursN, v.traces[l.num].intervalMs); if (!r2) return;
+    if (smartOn && (!meteoCompatible(lap, l) || horsAnalyse(v, l))) return;   // [v44] meteo voisine, tours propres
+    var r2 = secteursCalculer(l, p2, m2, secteursN, v.traces[l.num].intervalMs, bornesV); if (!r2) return;
     if (!meilleurs) { meilleurs = r2.sect.slice(); meilleurNum = {}; r2.sect.forEach(function (x, i) { meilleurNum[i] = l.num; }); }
     else r2.sect.forEach(function (x, i) { if (x != null && (meilleurs[i] == null || x < meilleurs[i])) { meilleurs[i] = x; meilleurNum[i] = l.num; } });
   });
   // [v15] les partielles du tour de reference, pour la colonne « vs #ref »
-  var ref = compReference(v, lap), refSect = null;
-  if (ref) { var pr = traceEntiere(v.traces[ref.num]), mr = circuitPourTour(ref, pr); if (mr && mr.c.id === m.c.id) { var rr = secteursCalculer(ref, pr, mr, secteursN, v.traces[ref.num].intervalMs); if (rr) refSect = rr.sect; } }
-  var h = '<tr><th>Partielle</th><th class="num">Temps</th>' + (ref ? '<th class="num">vs #' + lapNumAff(ref) + '</th>' : '') + '<th class="num">Écart vs meilleure</th><th class="small">Meilleure</th></tr>';
-  var gagne = [], perd = [];
+  var ref = compReference(v, lap), refSect = null, refStats = null;
+  if (ref) { var pr = traceEntiere(v.traces[ref.num]), mr = circuitPourTour(ref, pr); if (mr && mr.c.id === m.c.id) { var rr = secteursCalculer(ref, pr, mr, secteursN, v.traces[ref.num].intervalMs, bornesV); if (rr) { refSect = rr.sect; refStats = smartOn ? smartStats(ref, pr, rr, v.traces[ref.num]) : null; } } }
+  var stats = smartOn ? smartStats(lap, pts, res, tr) : null;
+  var h = '<tr><th>' + (smartOn && bornesV ? 'Section' : 'Partielle') + '</th><th class="num">Temps</th>' + (ref ? '<th class="num">vs #' + lapNumAff(ref) + '</th>' : '')
+        + '<th class="num">Écart vs meilleure</th><th class="small">Meilleure</th>' + (smartOn ? '<th class="small">Cause</th>' : '') + '</tr>';
+  var gagne = [], perd = [], pire = null, pireI = -1;
   res.sect.forEach(function (x, i) {
     var mb = meilleurs ? meilleurs[i] : null, rs = refSect ? refSect[i] : null, dr = (x != null && rs != null) ? x - rs : null;
     if (dr != null) (dr <= 0 ? gagne : perd).push('P' + (i + 1));
-    h += '<tr><td>P' + (i + 1) + ' <span class="small">(' + Math.round(i * res.L / secteursN) + '–' + Math.round((i + 1) * res.L / secteursN) + ' m)</span></td><td class="num"><b>' + dureeCourte(x) + '</b></td>'
+    if (dr != null && (pire == null || dr > pire)) { pire = dr; pireI = i; }
+    var b0 = i === 0 ? 0 : res.bornes[i - 1], b1 = i < res.bornes.length ? res.bornes[i] : res.L;
+    var nomS = (smartOn && bornesV ? 'S' : 'P') + (i + 1);
+    h += '<tr><td>' + nomS + ' <span class="small">(' + Math.round(b0) + '–' + Math.round(b1) + ' m)</span></td><td class="num"><b>' + dureeCourte(x) + '</b></td>'
       + (ref ? '<td class="num">' + (dr != null ? '<span style="color:' + (dr <= 0 ? 'var(--ok)' : 'var(--warn)') + ';font-weight:600">' + ecartTexte(dr) + '</span>' : '\u2014') + '</td>' : '')
-      + '<td class="num">' + (x != null && mb != null ? (x - mb <= 0 ? '<span style="color:var(--ok)">' : '') + ecartTexte(x - mb) + (x - mb <= 0 ? '</span>' : '') : '\u2014') + '</td><td class="small">' + (meilleurNum && meilleurNum[i] != null ? '#' + lapNumAff(v.laps[meilleurNum[i]]) : '') + '</td></tr>';
+      + '<td class="num">' + (x != null && mb != null ? (x - mb <= 0 ? '<span style="color:var(--ok)">' : '') + ecartTexte(x - mb) + (x - mb <= 0 ? '</span>' : '') : '\u2014') + '</td><td class="small">' + (meilleurNum && meilleurNum[i] != null ? '#' + lapNumAff(v.laps[meilleurNum[i]]) : '') + '</td>'
+      + (smartOn ? '<td class="small">' + (stats && refStats ? smartCause(dr, stats[i], refStats[i]) : '') + '</td>' : '') + '</tr>';
   });
   document.getElementById('tSect').innerHTML = h;
+  // [v44] le tour ideal et la phrase qui dit ou est le temps
+  var ph = document.getElementById('smartPhrase');
+  if (!smartOn) ph.style.display = 'none';
+  else {
+    ph.style.display = '';
+    var ideal = 0, complet = !!meilleurs;
+    if (meilleurs) meilleurs.forEach(function (x) { if (x == null) complet = false; else ideal += x; });
+    var txt = complet ? '<b>Tour idéal ' + duree(ideal) + '</b>' + (lap.dureeMs != null ? ' <span class="small">(' + ecartTexte(ideal - lap.dureeMs) + ' sur ce tour)</span>' : '') : '';
+    if (pireI >= 0 && pire > 100) {
+      var a = stats && stats[pireI], b = refStats && refStats[pireI];
+      var cause = (a && b) ? smartCause(pire, a, b) : '';
+      txt += (txt ? ' · ' : '') + '<b>' + ((bornesV ? 'S' : 'P') + (pireI + 1)) + '</b> te coûte <b>' + ecartTexte(pire) + '</b>'
+           + (a && b && a.kmhMin != null && b.kmhMin != null ? ' · mini ' + Math.round(a.kmhMin) + ' contre ' + Math.round(b.kmhMin) + ' km/h' : '')
+           + (cause ? ' · ' + cause : '');
+    }
+    var hs = horsAnalyse(v, lap);
+    if (hs) txt += (txt ? ' · ' : '') + '<span class="small">ce tour est hors analyse (' + hs + ')</span>';
+    ph.innerHTML = txt || '<span class="small">Pas encore assez de tours comparables pour une analyse.</span>';
+  }
   var ci = document.getElementById('compInfo');
   if (!ref) ci.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
   else ci.innerHTML = 'vs <b>#' + lapNumAff(ref) + '</b> (' + duree(ref.dureeMs) + ', ' + (compMode === 'meilleur' ? 'meilleur de la session' : compMode === 'jour' ? 'meilleur de la journée' : 'précédent') + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref.dureeMs) + '</b>' : '')
@@ -1317,6 +1447,7 @@ try { satVoulu = localStorage.getItem('mt_sat') === '1'; document.getElementById
 document.querySelector('input[name=orient][value=' + carte.mode + ']').checked = true;
 try { details = localStorage.getItem('mt_details') === '1'; } catch (e) {}
 document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails';
+try { smartOn = localStorage.getItem('mt_smart') === '1'; document.getElementById('smartOn').checked = smartOn; } catch (e) {}
 try { var vu = localStorage.getItem('mt_canvu'); if (vu && vu.length === 8) canMontre = vu.split('').map(function (c) { return c === '1'; }); } catch (e) {}
 try { partiellesOn = localStorage.getItem('mt_part') !== '0'; valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode; document.getElementById('partOn').checked = partiellesOn;
 circuitsCharger();
