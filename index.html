@@ -118,7 +118,7 @@
       <div><div class="small">Temps</div><div class="grand" id="tTemps"></div></div>
       <div><div class="small">Écart vs précédent</div><div class="grand" id="tEcart"></div></div>
       <div><div class="small">Écart vs meilleur (session)</div><div class="grand" id="tBest"></div></div>
-      <div id="meteoCase" style="display:none"><div class="small">Météo au circuit</div><div class="grand" id="tMeteo" style="font-size:1.35em"></div><div class="small" id="tMeteoSous"></div></div>
+      <div id="meteoCase" style="display:none"><div class="small">Météo au circuit</div><div class="grand" id="tMeteo" style="font-size:1.35em"></div><div class="small" id="tMeteoSous" style="display:none"></div></div>
     </div>
     <div class="small" id="tSrc" style="margin-top:6px"></div>
     <div class="row" style="margin-top:8px"><label class="small">Comparer à <select id="compSel" onchange="compChoisir()"><option value="meilleur">meilleur tour de la session</option><option value="jour">meilleur tour de la journée</option><option value="precedent">tour précédent</option><option value="aucun">rien (vitesse)</option></select></label> <span class="small" id="compInfo"></span></div>
@@ -178,7 +178,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v37';
+var PAGE_VER = 'MT v39';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -389,6 +389,9 @@ function decodeTour(v, b) {
   if (b.length >= off + 10) { lap.oLat = dv.getInt32(off, true) / 1e7; lap.oLon = dv.getInt32(off + 4, true) / 1e7; lap.dMax = dv.getUint16(off + 8, true); }
   if (!lap.recuMs) lap.recuMs = Date.now();
   v.laps[num] = lap;
+  if (lap.oLat != null && !(Math.abs(lap.oLat) < 1e-4 && Math.abs(lap.oLon) < 1e-4)) {   // [v39]
+    lap._mac = v.mac; meteoCollerAuTour(lap, meteoDemander(lap.oLat, lap.oLon));
+  }
   if (vueMac === v.mac) vueTour = num;
   jrn(v.nom + ' : tour #' + lapNumAff(lap) + (num >= 200 ? ' (session ' + Math.floor(num / 200) + ')' : '') + ' ' + duree(lap.dureeMs));
 }
@@ -483,6 +486,13 @@ function positionA(pts, intervalMs, tMs) {
   var a = pts[i], b = pts[i + 1], u = f - i; return { dx: a.dx + u * (b.dx - a.dx), dy: a.dy + u * (b.dy - a.dy) };
 }
 var meteoCache = {}, meteoEnCours = {};
+function meteoCollerAuTour(lap, mt) {
+  if (!mt || lap.meteo) return;
+  var age = lap.finUtc ? (Date.now() / 1000 - lap.finUtc) : 0;
+  if (age > 3600) return;   // trop vieux : on n'invente pas la meteo de ce jour-la
+  lap.meteo = { degres: mt.degres, pluie: mt.pluie, t: mt.t };
+  marquer(lap._mac || vueMac, lap.num); sauver();
+}
 function meteoCle(lat, lon) { return (Math.round(lat * 20) / 20).toFixed(2) + ',' + (Math.round(lon * 20) / 20).toFixed(2); }
 function meteoDemander(lat, lon) {
   var cle = meteoCle(lat, lon), m = meteoCache[cle];
@@ -496,6 +506,13 @@ function meteoDemander(lat, lon) {
     if (!j || !j.current) return;
     var pluie = 0; if (j.hourly && j.hourly.precipitation) j.hourly.precipitation.forEach(function (x) { if (x != null) pluie += x; });
     meteoCache[cle] = { t: Date.now(), degres: j.current.temperature_2m, pluie: pluie };
+    Object.keys(voitures).forEach(function (mv) {   // [v39] les tours frais de ce circuit prennent la valeur
+      var vv = voitures[mv];
+      Object.keys(vv.laps).forEach(function (nn) {
+        var ll = vv.laps[nn];
+        if (!ll.meteo && ll.oLat != null && meteoCle(ll.oLat, ll.oLon) === cle) { ll._mac = mv; meteoCollerAuTour(ll, meteoCache[cle]); }
+      });
+    });
     if (vueMac && vueTour != null) rendre();
   }).catch(function () { meteoEnCours[cle] = false; });   // sans Internet : rien, et pas un mot
   return m || null;
@@ -704,13 +721,16 @@ function rendre0() {
   document.getElementById('tEcart').textContent = prec && prec.dureeMs != null && lap.dureeMs != null ? ecartTexte(lap.dureeMs - prec.dureeMs) : '—';
   document.getElementById('tBest').textContent = best && lap.dureeMs != null ? (lap === best ? 'meilleur' : ecartTexte(lap.dureeMs - best.dureeMs)) : '—';
   // [v37] la meteo au circuit : la case n'existe que si une reponse est arrivee
-  var mc = document.getElementById('meteoCase'), mt = null;
-  if (lap.oLat != null && !(Math.abs(lap.oLat) < 1e-4 && Math.abs(lap.oLon) < 1e-4)) mt = meteoDemander(lap.oLat, lap.oLon);
+  var mc = document.getElementById('meteoCase'), mt = lap.meteo || null;
+  if (!mt && lap.oLat != null && !(Math.abs(lap.oLat) < 1e-4 && Math.abs(lap.oLon) < 1e-4)) {
+    mt = meteoDemander(lap.oLat, lap.oLon);
+    lap._mac = v.mac; meteoCollerAuTour(lap, mt);   // [v39] un tour frais garde sa meteo
+  }
   mc.style.display = mt ? '' : 'none';
   if (mt) {
-    document.getElementById('tMeteo').textContent = Math.round(mt.degres) + ' °C · ' + mt.pluie.toFixed(1).replace('.', ',') + ' mm';
-    var vieux = lap.finUtc ? Math.round((Date.now() / 1000 - lap.finUtc) / 3600) : 0;
-    document.getElementById('tMeteoSous').textContent = 'pluie de la dernière heure' + (vieux >= 3 ? ' · relevée maintenant, le tour a ' + vieux + ' h' : '');
+    document.getElementById('tMeteo').textContent = Math.round(mt.degres) + ' °C · H2O ' + mt.pluie.toFixed(1).replace('.', ',') + ' mm/h';
+    // [v38] une seule ligne : le chiffre parle, rien dessous
+    document.getElementById('tMeteoSous').textContent = '';
   }
   var av = document.getElementById('tSrc');
   av.textContent = lap.dureeMs == null ? '\u26a0 Resume du tour pas encore recu (valeurs ou trace seulement).' : '';
@@ -1009,7 +1029,7 @@ function csvTelecharger(nom, texte) {
 }
 function csvChamp(x) { x = String(x == null ? '' : x); return /[;"\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }
 function toursCsv() {
-  var lignes = ['voiture;mac;num;jour;session;session_debut;tour;tour_fil;tour_debut;tour_fin;temps_s;ecart_precedent_s;chrono;recu;p1_nom;p1_unite;p1_min;p1_moy;p1_max;p1_n;p2_nom;p2_unite;p2_min;p2_moy;p2_max;p2_n;p3_nom;p3_unite;p3_min;p3_moy;p3_max;p3_n;p4_nom;p4_unite;p4_min;p4_moy;p4_max;p4_n;p5_nom;p5_unite;p5_min;p5_moy;p5_max;p5_n;p6_nom;p6_unite;p6_min;p6_moy;p6_max;p6_n;p7_nom;p7_unite;p7_min;p7_moy;p7_max;p7_n;p8_nom;p8_unite;p8_min;p8_moy;p8_max;p8_n;origine_lat;origine_lon;dist_max_m;points_trace'];
+  var lignes = ['voiture;mac;num;jour;session;session_debut;tour;tour_fil;tour_debut;tour_fin;temps_s;ecart_precedent_s;chrono;recu;p1_nom;p1_unite;p1_min;p1_moy;p1_max;p1_n;p2_nom;p2_unite;p2_min;p2_moy;p2_max;p2_n;p3_nom;p3_unite;p3_min;p3_moy;p3_max;p3_n;p4_nom;p4_unite;p4_min;p4_moy;p4_max;p4_n;p5_nom;p5_unite;p5_min;p5_moy;p5_max;p5_n;p6_nom;p6_unite;p6_min;p6_moy;p6_max;p6_n;p7_nom;p7_unite;p7_min;p7_moy;p7_max;p7_n;p8_nom;p8_unite;p8_min;p8_moy;p8_max;p8_n;meteo_c;meteo_mm_h;meteo_heure;origine_lat;origine_lon;dist_max_m;points_trace'];
   ordreVoitures.forEach(function (m) {
     var v = voitures[m], laps = lapsTries(v), sessions = sessionsDe(v);
     laps.forEach(function (l, i) {
@@ -1024,6 +1044,7 @@ function toursCsv() {
         else if (rs) r.push((c && c.nom) || ('p' + (k + 1)), (c && c.unite) || '', +rs.min.toFixed(3), +rs.moy.toFixed(3), +rs.max.toFixed(3), rs.n);
         else r.push('', '', '', '', '', '');
       }
+      r.push(l.meteo ? l.meteo.degres : '', l.meteo ? l.meteo.pluie : '', l.meteo ? iso(l.meteo.t) : '');   // [v39] la meteo du tour
       r.push(l.oLat != null ? l.oLat.toFixed(7) : '', l.oLon != null ? l.oLon.toFixed(7) : '', l.dMax != null ? l.dMax : '', traceEntiere(v.traces[l.num]).length);
       lignes.push(r.map(csvChamp).join(';'));
     });
