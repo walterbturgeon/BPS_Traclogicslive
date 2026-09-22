@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TRACKLOGICS MT</title>
+<title>TRACLOGICS Live</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-mt-192.png" type="image/png"><link rel="apple-touch-icon" href="icon-mt-192.png">
 <meta name="theme-color" content="#111111">
@@ -14,6 +14,13 @@
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:16px; }
   header { padding:12px 16px 8px; display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
+  /* [v24] LE BANDEAU RESTE EN HAUT. Le bouton de connexion et les onglets des voitures ne doivent
+     jamais sortir de l'ecran : en piste, on change de voiture en glissant dans les tours. */
+  .fige { position:sticky; top:0; z-index:20; background:var(--bg); padding-bottom:4px; box-shadow:0 2px 8px rgba(0,0,0,.10); }
+  .fige .card { margin-bottom:8px; }
+  .fige .tabs { margin-bottom:6px; }
+  .fige .tabs:empty { display:none; }
+  @media (max-height:520px) { .fige header { display:none; } }   /* tres peu de hauteur : le titre cede la place */
   header h1 { font-size:1.15em; margin:0; letter-spacing:.04em; }
   header .ver { color:var(--muted); font-size:.85em; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; margin:0 16px 12px; padding:12px 14px; }
@@ -51,8 +58,9 @@
 </style>
 </head>
 <body>
+<div class="fige">   <!-- [v24] entete, connexion et onglets : toujours visibles -->
 <header>
-  <h1>TRACKLOGICS — tour à tour</h1>
+  <h1>TRACLOGICS Live</h1>
   <span class="ver" id="pageVer">page MT v1</span>
   <span class="badge" id="majBadge" style="display:none">mise à jour…</span>
 </header>
@@ -66,6 +74,7 @@
 </div>
 
 <div class="tabs" id="tabs"></div>
+</div>
 
 <div id="vide" class="card small">Aucune voiture encore. Connecte le collecteur (RELAY_MT) : les voitures apparaissent à leur premier battement ou à leur premier tour.</div>
 
@@ -145,7 +154,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v23';
+var PAGE_VER = 'MT v24';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :

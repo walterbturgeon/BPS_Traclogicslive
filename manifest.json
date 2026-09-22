@@ -1,6 +1,6 @@
 {
-  "name": "TRACKLOGICS MT",
-  "short_name": "TRACKLOGICS",
+  "name": "TRACLOGICS Live",
+  "short_name": "TRACLOGICS",
   "description": "Tours de piste, plusieurs voitures, un collecteur.",
   "id": "/BPS_Traclogicslive/",
   "start_url": "./index.html",
