@@ -17,7 +17,16 @@
   /* [v24] LE BANDEAU RESTE EN HAUT. Le bouton de connexion et les onglets des voitures ne doivent
      jamais sortir de l'ecran : en piste, on change de voiture en glissant dans les tours. */
   .fige { position:sticky; top:0; z-index:20; background:var(--bg); padding-bottom:4px; padding-right:50px; box-shadow:0 2px 8px rgba(0,0,0,.10); }
-  #btnReglages { position:absolute; top:8px; right:8px; z-index:21; }
+  #btnReglages { position:absolute; top:0; right:0; bottom:4px; z-index:21; width:50px; border-radius:0 0 0 12px;
+                 display:flex; align-items:center; justify-content:center; font-size:1.3em; }
+  /* le panneau : hors de l'ecran a droite, il glisse par-dessus tout */
+  #reglages { position:fixed; top:0; right:0; bottom:0; width:min(520px,100%); z-index:40; overflow-y:auto;
+              background:var(--bg); border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.28);
+              transform:translateX(100%); transition:transform .22s ease-out; padding:12px 16px 24px; }
+  #reglages.ouvert { transform:translateX(0); }
+  #voileReglages { position:fixed; inset:0; z-index:39; background:rgba(0,0,0,.35); display:none; }
+  #voileReglages.ouvert { display:block; }
+  #reglages .tete { position:sticky; top:-12px; background:var(--bg); padding:4px 0 10px; margin:-4px 0 0; }
   .fige .card { margin-bottom:8px; }
   .fige .tabs { margin-bottom:6px; }
   .fige .tabs:empty { display:none; }
@@ -99,8 +108,9 @@
 <button class="btn sec icone" id="btnReglages" onclick="reglagesBascule()" aria-label="Réglages" title="Réglages : thème, mémoire, exports, journal">⚙</button>
 </div>
 
-<div id="reglages" class="card" style="display:none">
-  <div class="row" style="justify-content:space-between;margin-bottom:10px">
+<div id="voileReglages" onclick="reglagesBascule()"></div>
+<div id="reglages" role="dialog" aria-label="Réglages">
+  <div class="row tete" style="justify-content:space-between">
     <b>Réglages</b>
     <button class="btn sec" onclick="reglagesBascule()">Fermer</button>
   </div>
@@ -189,7 +199,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v41';
+var PAGE_VER = 'MT v42';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -247,15 +257,15 @@ function themePoser() {
   if (vueMac && vueTour != null) rendre();
 }
 function reglagesBascule() {
-  var d = document.getElementById('reglages'), ouvert = d.style.display === 'none';
-  d.style.display = ouvert ? '' : 'none';
-  if (ouvert) {
-    memoireEtat();
-    // le bandeau fige couvrirait le haut du panneau : on s'arrete juste dessous
-    var fh = document.querySelector('.fige').getBoundingClientRect().height;
-    window.scrollTo(0, Math.max(0, d.getBoundingClientRect().top + window.scrollY - fh - 8));
-  }
+  var d = document.getElementById('reglages'), voile = document.getElementById('voileReglages');
+  var ouvert = !d.classList.contains('ouvert');
+  d.classList.toggle('ouvert', ouvert); voile.classList.toggle('ouvert', ouvert);
+  document.body.style.overflow = ouvert ? 'hidden' : '';   // la page de piste ne glisse plus derriere
+  if (ouvert) { memoireEtat(); d.scrollTop = 0; }
 }
+document.addEventListener('keydown', function (e) {   // la touche Echap referme
+  if (e.key === 'Escape' && document.getElementById('reglages').classList.contains('ouvert')) reglagesBascule();
+});
 function themeSuivant() {
   theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
   try { localStorage.setItem('mt_theme', theme); } catch (e) {}
