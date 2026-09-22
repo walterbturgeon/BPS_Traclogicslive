@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'traclogics-mt-';
-const CACHE = PREFIX + 'v59';   // v59 : les valeurs sous la carte en largeur, apres les tours en hauteur
+const CACHE = PREFIX + 'v60';   // v60 : la tete est l interrupteur du mode smart, a cote du Connect
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg', './circuits_index.csv', './circuits_offsets.csv'];
 
 self.addEventListener('install', (ev) => {

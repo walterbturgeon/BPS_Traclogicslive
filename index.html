@@ -81,9 +81,8 @@
     #btnConn { padding:0 18px; }
     #btnTheme, #smartVu { min-width:46px; }
   }
-  #smartVu { background:var(--accent); color:#fff; border:0; padding:6px 8px; min-width:38px; border-radius:10px; cursor:pointer;
-             display:none; align-items:center; justify-content:center; vertical-align:middle; }
-  #smartVu.on { display:inline-flex; }
+  #smartVu { display:inline-flex; align-items:center; justify-content:center; padding:4px 8px; }
+  #smartVu.on { background:var(--accent); color:#fff; border-color:var(--accent); }
   .bande { display:inline-block; vertical-align:middle; margin-left:10px; padding:5px 12px; border-radius:999px;
            font-size:.8em; font-weight:600; color:#fff; letter-spacing:.01em; }
   .pastille { width:16px; height:16px; padding:0; border-radius:50%; border:2px solid var(--muted); background:transparent; cursor:pointer; vertical-align:middle; margin-right:8px; }
@@ -108,16 +107,6 @@
 <header>
   <h1>TRACLOGICS Live</h1>
   <span class="ver" id="pageVer">page MT v1</span>
-  <button id="smartVu" onclick="reglagesBascule()" aria-label="Mode smart actif" title="Mode smart actif — toucher pour ouvrir les réglages">
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M9.1 6.1c1-2.4 3.4-3.9 6-3.7 3.7.3 6.5 3.4 6.3 7.1-.1 1.9-.8 3.3-1.7 4.6-.5.8-.8 1.7-.8 2.6v5.1"/>
-      <path d="M9.1 6.1c-.8 1.6-1.8 3.2-2.8 4.6-.5.7-.4 1.3.4 1.5l1.6.4c.4.1.6.4.6.8l.1 2.3c0 1 .8 1.7 1.8 1.7h3c1 0 1.7-.7 1.7-1.7"/>
-      <path d="M11.4 12.2a1.8 1.8 0 0 1 .4-3.3 1.9 1.9 0 0 1 3-1.5 1.8 1.8 0 0 1 2.8.7 1.8 1.8 0 0 1 1.3 2.7 1.7 1.7 0 0 1-.7 2.7"/>
-      <path d="M11.4 12.2h3.6"/>
-      <path d="M13.9 10.1a1 1 0 0 1 1.7.7"/>
-      <path d="M17.2 13.5c1 .4 1.3 1.6.6 2.4-.4.5-1 .7-1.6.6v5.3"/>
-    </svg></button>
   <span class="badge" id="majBadge" style="display:none">mise à jour…</span>
 </header>
 
@@ -125,6 +114,16 @@
   <div class="row">
     <button class="btn" id="btnConn" onclick="connecter()" title="Se connecter au collecteur RELAY_MT">Connect</button>
     <span id="etat" class="small"></span>
+    <button id="smartVu" class="btn sec icone" onclick="smartBascule()" aria-label="Mode smart">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9.1 6.1c1-2.4 3.4-3.9 6-3.7 3.7.3 6.5 3.4 6.3 7.1-.1 1.9-.8 3.3-1.7 4.6-.5.8-.8 1.7-.8 2.6v5.1"/>
+        <path d="M9.1 6.1c-.8 1.6-1.8 3.2-2.8 4.6-.5.7-.4 1.3.4 1.5l1.6.4c.4.1.6.4.6.8l.1 2.3c0 1 .8 1.7 1.8 1.7h3c1 0 1.7-.7 1.7-1.7"/>
+        <path d="M11.4 12.2a1.8 1.8 0 0 1 .4-3.3 1.9 1.9 0 0 1 3-1.5 1.8 1.8 0 0 1 2.8.7 1.8 1.8 0 0 1 1.3 2.7 1.7 1.7 0 0 1-.7 2.7"/>
+        <path d="M11.4 12.2h3.6"/>
+        <path d="M13.9 10.1a1 1 0 0 1 1.7.7"/>
+        <path d="M17.2 13.5c1 .4 1.3 1.6.6 2.4-.4.5-1 .7-1.6.6v5.3"/>
+      </svg></button>
   </div>
   <div class="small" id="collInfo" style="margin-top:6px"></div>
 </div>
@@ -139,10 +138,8 @@
     <b>Réglages</b>
     <button class="btn sec" onclick="reglagesBascule()">Fermer</button>
   </div>
-  <div class="row" style="margin-bottom:10px">
-    <label class="small"><input type="checkbox" id="smartOn" onchange="smartBascule()"> <b>Mode smart</b></label>
-    <span class="small">Sections aux virages, tour idéal, cause d'une perte, tours hors analyse, météo voisine seulement.</span>
-  </div>
+  <div class="small" style="margin-bottom:10px"><b>Mode smart</b> — il s'allume et s'éteint par la tête, à côté du bouton Connect.
+    Sections aux virages, tour idéal, cause d'une perte, tours hors analyse, météo voisine seulement.</div>
   <div class="row" style="margin-bottom:10px">
     <button class="btn sec" onclick="smartZero()">Remettre le smart à zéro</button>
     <span class="small" id="smartZeroEtat"></span>
@@ -251,7 +248,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v59';
+var PAGE_VER = 'MT v60';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -765,9 +762,13 @@ function smartTemps(v, lap) {
   }
   return sorties;
 }
-function smartVuMaj() { var e = document.getElementById('smartVu'); if (e) e.classList.toggle('on', smartOn); }   // [v48]
+function smartVuMaj() {   // [v60] allumee : fond bleu ; eteinte : un bouton ordinaire
+  var e = document.getElementById('smartVu'); if (!e) return;
+  e.classList.toggle('on', smartOn);
+  e.title = smartOn ? 'Mode smart ALLUMÉ — toucher pour éteindre' : 'Mode smart éteint — toucher pour allumer';
+}
 function smartBascule() {
-  smartOn = document.getElementById('smartOn').checked;
+  smartOn = !smartOn;   // [v60] la tete EST l'interrupteur
   smartVuMaj();
   try { localStorage.setItem('mt_smart', smartOn ? '1' : '0'); } catch (e) {}
   smartBornes = {}; smartCacheStats = {}; rendre();
@@ -1745,7 +1746,7 @@ try { satVoulu = localStorage.getItem('mt_sat') === '1'; document.getElementById
 document.querySelector('input[name=orient][value=' + carte.mode + ']').checked = true;
 try { details = localStorage.getItem('mt_details') === '1'; } catch (e) {}
 document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails';
-try { smartOn = localStorage.getItem('mt_smart') === '1'; document.getElementById('smartOn').checked = smartOn; } catch (e) {}
+try { smartOn = localStorage.getItem('mt_smart') === '1'; } catch (e) {}
 try { smartZeroMs = +(localStorage.getItem('mt_smartzero') || 0) || 0; } catch (e) {}
 try { limitesTout = JSON.parse(localStorage.getItem('mt_limites') || '{}') || {}; } catch (e) { limitesTout = {}; }
 smartVuMaj(); smartZeroMaj();
