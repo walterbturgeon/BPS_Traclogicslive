@@ -26,8 +26,8 @@
   @media (min-width:900px) {
     .fige { display:flex; align-items:center; gap:0 12px; flex-wrap:wrap; }
     .fige header { padding:8px 0 8px 16px; }
-    .fige .card { flex:1 1 320px; margin:6px 0; }
-    .fige .tabs { margin:6px 16px 6px 0; }
+    .fige .card { flex:0 0 auto; margin:6px 0; }
+    .fige .tabs { flex:1 1 200px; min-width:0; margin:6px 16px 6px 0; }
   }
   header h1 { font-size:1.15em; margin:0; letter-spacing:.04em; }
   header .ver { color:var(--muted); font-size:.85em; }
@@ -87,8 +87,8 @@
 
 <div class="card">
   <div class="row">
-    <button class="btn" id="btnConn" onclick="connecter()">Connecter le collecteur</button>
-    <span id="etat" class="small">Pas connecté.</span>
+    <button class="btn" id="btnConn" onclick="connecter()" title="Se connecter au collecteur RELAY_MT">Connect</button>
+    <span id="etat" class="small"></span>
     <button class="btn sec" id="btnTheme" onclick="themeSuivant()" title="Thème clair, sombre ou automatique" style="margin-left:auto">Thème</button>
   </div>
   <div class="small" id="collInfo" style="margin-top:6px"></div>
@@ -176,7 +176,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v33';
+var PAGE_VER = 'MT v34';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -267,6 +267,15 @@ function jrnPartager() {
   a.href = URL.createObjectURL(b); a.download = 'tracklogics_mt_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.txt'; a.click();
 }
 function etat(t) { document.getElementById('etat').textContent = t; jrn(t); }
+// [v34] LE BOUTON DIT L'ETAT PAR SA COULEUR. « Connect » gris = pas de collecteur ;
+// « Connecte » vert = la tablette recoit. Un mot court laisse la place aux voitures.
+function connBouton(ok) {
+  var b = document.getElementById('btnConn');
+  b.textContent = ok ? 'Connecté' : 'Connect';
+  b.style.background = ok ? 'var(--ok)' : '';
+  b.style.color = ok ? '#fff' : '';
+  b.title = ok ? 'Connecté au collecteur — toucher pour déconnecter' : 'Se connecter au collecteur RELAY_MT';
+}
 
 // ---- BLE ----
 async function connecter() {
@@ -277,7 +286,7 @@ async function connecter() {
     device = await navigator.bluetooth.requestDevice({ filters: [{ services: [RL_SVC] }], optionalServices: [RL_SVC] });
     device.addEventListener('gattserverdisconnected', function () {
       connecte = false; cmdChar = null;
-      document.getElementById('btnConn').textContent = 'Connecter le collecteur';
+      connBouton(false);
       etat('Collecteur deconnecte. Reconnexion dans 3 s...');
       setTimeout(reconnecter, 3000);
     });
@@ -298,7 +307,7 @@ async function attacher(server) {
   dataChar = ch; ch.addEventListener('characteristicvaluechanged', notif);
   cmdChar = await svc.getCharacteristic(RL_CMD);
   connecte = true;
-  document.getElementById('btnConn').textContent = 'Deconnecter';
+  connBouton(true);
   var nom = device.name || '?';
   etat('Connecte a ' + nom + '. Le collecteur renvoie ce qu’il garde...');
   try {
