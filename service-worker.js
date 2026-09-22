@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'draglog-mt-';
-const CACHE = PREFIX + 'v67';   // v67 : la section dit le temps perdu ou gagne, puis la raison
+const CACHE = PREFIX + 'v68';   // v68 : lignes de secteur sur la carte, et le fond satellite part quand on le decoche
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg', '../circuits_index.csv', '../circuits_offsets.csv'];
 
 self.addEventListener('install', (ev) => {

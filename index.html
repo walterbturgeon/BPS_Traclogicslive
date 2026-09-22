@@ -248,7 +248,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v67';
+var PAGE_VER = 'MT v68';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1330,7 +1330,7 @@ function dessiner(v, lap) {
       var ddy = (satImg.lat - vLat) * rad0 * R0, ddx = (satImg.lon - vLon) * rad0 * R0 * Math.cos(vLat * rad0);
       satOk = Math.hypot(ddx, ddy) * s < D0 / 4 && Math.abs(s / satImg.s - 1) < 0.25 && Math.abs(satImg.D - D0) < 2;
     }
-    if (satImg) {
+    if (satVoulu && satImg) {   // [v68] la case decochee retire le fond tout de suite
       // l'image se pose sur son centre geographique, ramene dans le repere de CE tour
       var ix = (satImg.lon - lap.oLon) * rad0 * R0 * Math.cos(lap.oLat * rad0), iy = (satImg.lat - lap.oLat) * rad0 * R0;
       g.save(); g.globalAlpha = 0.85;
@@ -1363,11 +1363,30 @@ function dessiner(v, lap) {
     circVue.axe.forEach(function (p, i) { var x = X(p.dx, p.dy), y = Y(p.dx, p.dy); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); }); g.closePath(); g.stroke(); g.restore();
   }
   if (circVue && circVue.bornes && partiellesOn) {
-    circVue.bornes.forEach(function (b, i) {
-      var x = X(b.dx, b.dy), y = Y(b.dx, b.dy);
-      g.save(); g.strokeStyle = '#fff'; g.lineWidth = 6; g.beginPath(); g.arc(x, y, 7, 0, Math.PI * 2); g.stroke(); g.strokeStyle = '#ff1fd0'; g.lineWidth = 3; g.stroke();
-      g.fillStyle = '#ff1fd0'; g.font = 'bold 12px system-ui'; g.fillText('P' + (i + 2), x + 10, y - 8); g.restore();
-    });
+    var LET = circVue.lettre || 'P', DEMI = 16;   // [v68] 16 m de chaque cote de l'axe : la piste et sa marge
+    var ligneBorne = function (dx, dy, px, py, nom) {
+      var x1 = X(dx - px * DEMI, dy - py * DEMI), y1 = Y(dx - px * DEMI, dy - py * DEMI);
+      var x2 = X(dx + px * DEMI, dy + py * DEMI), y2 = Y(dx + px * DEMI, dy + py * DEMI);
+      g.save(); g.lineCap = 'butt';
+      g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = 5;   // l'ombre, pour tenir sur le fond satellite
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+      if (nom) {   // l'etiquette au bout de la ligne, en petit
+        var ex = x2 > x1 ? x2 : x1, ey = x2 > x1 ? y2 : y1;
+        g.font = 'bold 11px system-ui';
+        var tw = g.measureText(nom).width;
+        var bx = Math.min(w - tw - 6, Math.max(2, ex + 4)), by = Math.min(h - 4, Math.max(12, ey));
+        g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.roundRect(bx - 3, by - 10, tw + 6, 13, 3); g.fill();
+        g.fillStyle = 'rgba(255,255,255,0.95)'; g.fillText(nom, bx, by);
+      }
+      g.restore();
+    };
+    if (pts.length > 2) {   // la ligne de depart : la borne du premier secteur
+      var u0x = pts[2].dx - pts[0].dx, u0y = pts[2].dy - pts[0].dy, u0 = Math.hypot(u0x, u0y) || 1;
+      ligneBorne(pts[0].dx, pts[0].dy, -u0y / u0, u0x / u0, LET + '1');
+    }
+    circVue.bornes.forEach(function (b, i) { ligneBorne(b.dx, b.dy, b.px, b.py, LET + (i + 2)); });
   }
   // [v20] LES MAX DES CANAUX : un point de couleur la ou chaque canal a atteint son maximum (demande du 21 sept. 2026 :
   // les max seulement, pas les min). La position vient du temps : seconde du max -> instant -> point de la trace.
@@ -1423,7 +1442,12 @@ function dessiner(v, lap) {
     lg.textContent = 'Mode smart : seule la section dont parle la bande est en couleur. ' + pts.length + ' points';
   if (satVoulu && cle && !satOk) satPlanifier(lap, cle);
 }
-function satBascule() { satVoulu = document.getElementById('satOn').checked; try { localStorage.setItem('mt_sat', satVoulu ? '1' : '0'); } catch (e) {} rendre(); }
+function satBascule() {
+  satVoulu = document.getElementById('satOn').checked;
+  if (!satVoulu) { satImg = null; satCle = ''; document.getElementById('satEtat').textContent = ''; }   // [v68]
+  try { localStorage.setItem('mt_sat', satVoulu ? '1' : '0'); } catch (e) {}
+  rendre();
+}
 // on attend la fin du geste (600 ms sans changement) avant de demander une image
 function satPlanifier(lap, cle) {
   satDemandeMs = Date.now();
@@ -1440,7 +1464,8 @@ function satCharger(lap, cle) {
   document.getElementById('satEtat').textContent = 'Chargement du fond...';
   var im = new Image(); im.crossOrigin = 'anonymous';
   im.lat = cle.lat; im.lon = cle.lon; im.s = cle.s; im.D = cle.D;
-  im.onload = function () { satImg = im; satCle = satCleTexte(cle); document.getElementById('satEtat').textContent = ''; rendre(); };
+  im.onload = function () { if (!satVoulu) return;   // [v68] la case a ete decochee pendant le chargement
+    satImg = im; satCle = satCleTexte(cle); document.getElementById('satEtat').textContent = ''; rendre(); };
   im.onerror = function () { satImg = null; satCle = ''; document.getElementById('satEtat').textContent = 'Fond satellite non recu (reseau ?).'; };
   im.src = url;
 }
@@ -1801,9 +1826,11 @@ function circuitRendre(v, lap) {
     var sAbs = m.ss[0] + (res.sensPos ? B : -B); sAbs = ((sAbs % m.c.L) + m.c.L) % m.c.L;
     var k = m.c, i = 0; while (i < k.pts.length - 1 && k.cum[i + 1] < sAbs) i++;
     var a = k.pts[i], b = k.pts[(i + 1) % k.pts.length], f = (sAbs - k.cum[i]) / Math.max(k.cum[i + 1] - k.cum[i], 1e-6);
-    bornes.push({ dx: a.x + f * (b.x - a.x) - m.dLon, dy: a.y + f * (b.y - a.y) - m.dLat });
+    var ux = b.x - a.x, uy = b.y - a.y, ul = Math.hypot(ux, uy) || 1;   // [v68] la perpendiculaire a l'axe
+    bornes.push({ dx: a.x + f * (b.x - a.x) - m.dLon, dy: a.y + f * (b.y - a.y) - m.dLat, px: -uy / ul, py: ux / ul });
   });
-  circVue = { bornes: bornes, axe: m.c.pts.map(function (p) { return { dx: p.x - m.dLon, dy: p.y - m.dLat }; }) };
+  circVue = { bornes: bornes, lettre: (smartOn && bornesV) ? 'S' : 'P',
+              axe: m.c.pts.map(function (p) { return { dx: p.x - m.dLon, dy: p.y - m.dLat }; }) };
 }
 
 // ---- commandes ----
