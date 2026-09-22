@@ -233,7 +233,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v53';
+var PAGE_VER = 'MT v54';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -491,6 +491,7 @@ function decodeTour(v, b) {
   if (b.length >= off + 10) { lap.oLat = dv.getInt32(off, true) / 1e7; lap.oLon = dv.getInt32(off + 4, true) / 1e7; lap.dMax = dv.getUint16(off + 8, true); }
   if (!lap.recuMs) lap.recuMs = Date.now();
   v.laps[num] = lap;
+  if (!lap.cat && v.cats && v.cats[lapSessionCle(lap)]) lap.cat = v.cats[lapSessionCle(lap)];   // [v54]
   if (lap.oLat != null && !(Math.abs(lap.oLat) < 1e-4 && Math.abs(lap.oLon) < 1e-4)) {   // [v39]
     lap._mac = v.mac; meteoCollerAuTour(lap, meteoDemander(lap.oLat, lap.oLon));
   }
@@ -543,6 +544,13 @@ function decodeCatalogue(v, b) {
     if (su) lap.sessionUtc = su; if (du) lap.debutUtc = du; if (fu) lap.finUtc = fu; lap.motif = b[157];
   }
   lap.cat = cat; v.laps[num] = lap;
+  if (!v.cats) v.cats = {};
+  v.cats[lapSessionCle(lap)] = cat;   // [v54] la session garde le sien
+  Object.keys(v.laps).forEach(function (n2) {   // ... et les tours deja recus le prennent
+    var l2 = v.laps[n2];
+    if (!l2.cat && lapSessionCle(l2) === lapSessionCle(lap)) { l2.cat = cat; marquer(v.mac, +n2); }
+  });
+  marquer(v.mac, num); sauver();
 }
 function decodeCanaux(v, b) {
   if (b.length < 10) return;
@@ -554,6 +562,7 @@ function decodeCanaux(v, b) {
   for (var i = 0; i < n; i++) { var o = 10 + i * 9, r = [b[o]]; for (var k = 0; k < 8; k++) r.push(b[o + 1 + k]); rows.push(r); }
   can.parts[part] = { s0: s0, rows: rows };
   lap.can = can; v.laps[num] = lap;
+  if (!lap.cat && v.cats && v.cats[lapSessionCle(lap)]) lap.cat = v.cats[lapSessionCle(lap)];   // [v54] celui de la session
 }
 // les echantillons d'un tour : tableau indexe par la seconde, [masque, p1..p8] ou undefined
 function canEchantillons(lap) {
@@ -987,7 +996,7 @@ function restaurer(fichier) {
         marquer(m, null);
       });
       if (!vueMac && ordreVoitures.length) vueMac = ordreVoitures[0];
-      sauver(); rendre(); jrn('Restauration : ' + ajoutes + ' tour(s) ajoute(s) depuis ' + fichier.name); alert(ajoutes + ' tour(s) restaure(s). Les tours deja presents sont gardes tels quels.');
+      catsRelier(); sauver(); rendre(); jrn('Restauration : ' + ajoutes + ' tour(s) ajoute(s) depuis ' + fichier.name); alert(ajoutes + ' tour(s) restaure(s). Les tours deja presents sont gardes tels quels.');
     } catch (e) { alert('Sauvegarde illisible : ' + e.message); }
   };
   lecteur.readAsText(fichier);
@@ -1006,7 +1015,7 @@ function charger() {
       r.tours.forEach(function (t) { var v = voitures[t.mac]; if (!v) { v = voitures[t.mac] = { mac: t.mac, nom: '?', num: 0, fw: '', vuMs: 0, idx: null, laps: {}, traces: {} }; ordreVoitures.push(t.mac); } if (t.lap) v.laps[t.num] = t.lap; if (t.trace) v.traces[t.num] = t.trace; });
       if (ordreVoitures.length) vueMac = ordreVoitures[0];
     }
-    rendre(); memoireEtat();
+    catsRelier(); rendre(); memoireEtat();
   }).catch(function (e) { jrn('\u26a0 IndexedDB indisponible (' + e.message + ') : memoire de secours localStorage'); chargerLocal(); rendre(); memoireEtat(); });
 }
 function chargerLocal() {
@@ -1056,6 +1065,14 @@ function sessionDe(v, lap) { var k = lapSessionCle(lap), r = null; sessionsDe(v)
 function lapsSession(v, lap) { var sn = sessionDe(v, lap); return sn ? sn.laps : lapsTries(v); }
 function lapsJour(v, lap) { var sn = sessionDe(v, lap), out = []; if (!sn) return lapsTries(v); sessionsDe(v).forEach(function (x) { if (x.jour === sn.jour) out = out.concat(x.laps); }); return out; }
 var sessionsRepliees = {};   // ce que le doigt a replie, garde d'un rendu a l'autre
+// [v54] apres un chargement : chaque session donne son catalogue aux tours qui n'en ont pas
+function catsRelier() {
+  Object.keys(voitures).forEach(function (m) {
+    var v = voitures[m]; v.cats = v.cats || {};
+    Object.keys(v.laps).forEach(function (n) { var l = v.laps[n]; if (l.cat) v.cats[lapSessionCle(l)] = l.cat; });
+    Object.keys(v.laps).forEach(function (n) { var l = v.laps[n]; if (!l.cat && v.cats[lapSessionCle(l)]) l.cat = v.cats[lapSessionCle(l)]; });
+  });
+}
 function rendre() {   // [v17] la position verticale est gardee : seul le doigt fait defiler
   var sy = window.scrollY || window.pageYOffset || 0;
   try { rendre0(); } finally {
