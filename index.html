@@ -71,6 +71,8 @@
     .deux .listeTours { max-height:calc(100vh - 150px); overflow:auto; }
   }
   .btn.icone { padding:8px; min-width:38px; line-height:1; font-size:1.05em; }
+  .bande { display:inline-block; vertical-align:middle; margin-left:10px; padding:5px 12px; border-radius:999px;
+           font-size:.8em; font-weight:600; color:#fff; letter-spacing:.01em; }
   .pastille { width:16px; height:16px; padding:0; border-radius:50%; border:2px solid var(--muted); background:transparent; cursor:pointer; vertical-align:middle; margin-right:8px; }
   .pastille.on { border-color:transparent; }
   .jour { font-weight:600; margin:14px 0 4px; padding-bottom:4px; border-bottom:2px solid var(--line); }
@@ -143,6 +145,7 @@
   <div class="card">
     <div class="row" style="justify-content:space-between">
       <div><span class="grand" id="vNom"></span> <span class="small" id="vSub"></span>
+        <span class="bande" id="smartBande" style="display:none"></span>
         <button class="btn sec icone" onclick="partagerVoiture()" aria-label="Envoyer par courriel" title="Envoyer les tours de cette voiture par courriel" style="margin-left:8px;vertical-align:middle">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>
@@ -209,7 +212,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v46';
+var PAGE_VER = 'MT v47';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1335,6 +1338,7 @@ function secteursCalculer(lap, pts, m, N, intervalMs, bornesM) {   // [v44] born
 // le rendu du bloc, appele par rendre() ; rend aussi ce qu'il faut a la carte (bornes en metres du repere du tour)
 function circuitRendre(v, lap) {
   var bloc = document.getElementById('circBloc'); bloc.style.display = 'none'; circVue = null;
+  var bande = document.getElementById('smartBande'); bande.style.display = 'none';   // [v47]
   { var ref0 = compReference(v, lap), ci0 = document.getElementById('compInfo');
     if (!ref0) ci0.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
     else ci0.innerHTML = 'vs <b>#' + lapNumAff(ref0) + '</b> (' + duree(ref0.dureeMs) + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref0.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref0.dureeMs) + '</b>' : ''); }
@@ -1401,6 +1405,11 @@ function circuitRendre(v, lap) {
     if (pireI >= 0 && pire > 100) {
       var a = stats && stats[pireI], b = refStats && refStats[pireI];
       var cause = (a && b) ? smartCause(pire, a, b) : '';
+      // [v47] la bande a cote du nom : la section, l'ecart, la cause
+      var nomP = (bornesV ? 'S' : 'P') + (pireI + 1);
+      bande.textContent = nomP + ' · ' + ecartTexte(pire) + (cause ? ' · ' + cause : '');
+      bande.style.background = /m\u00e9canique/.test(cause) ? 'var(--warn)' : (cause === 'lev\u00e9 de pied' ? '#c47f1b' : 'var(--accent)');
+      bande.style.display = '';
       txt += (txt ? ' · ' : '') + '<b>' + ((bornesV ? 'S' : 'P') + (pireI + 1)) + '</b> te coûte <b>' + ecartTexte(pire) + '</b>'
            + (a && b && a.kmhMin != null && b.kmhMin != null ? ' · mini ' + Math.round(a.kmhMin) + ' contre ' + Math.round(b.kmhMin) + ' km/h' : '')
            + (cause ? ' · ' + cause : '');
