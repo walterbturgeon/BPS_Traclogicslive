@@ -170,7 +170,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v28';
+var PAGE_VER = 'MT v29';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -976,6 +976,7 @@ function traceCsv() {
 // (un point toutes les ~0,3 a 0,7 s, donc a quelques dixiemes pres).
 var circuits = null, circErreur = '';
 var secteursN = 3;   // [v28] le decoupage de l'axe ; plus de selecteur a l'ecran
+var circVuId = '';   // [v29] le dernier circuit deja annonce au journal
 var circVue = null;   // l'axe et les bornes du tour AFFICHE, en metres du repere du tour (pas garde en memoire locale)
 function csvLignes(t) { return t.split(/\r?\n/).filter(function (l) { return l.length && l[0] !== '#'; }); }
 function csvChamps(l) { var out = [], cur = '', q = false; for (var i = 0; i < l.length; i++) { var c = l[i]; if (c === '"') { q = !q; } else if (c === ',' && !q) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; }
@@ -1063,7 +1064,13 @@ function circuitRendre(v, lap) {
   var tr = v.traces[lap.num], res = secteursCalculer(lap, pts, m, secteursN, tr.intervalMs);
   bloc.style.display = '';
   document.getElementById('circNom').textContent = m.c.nom;
-  document.getElementById('circInfo').textContent = 'reconnu (écart médian ' + m.med.toFixed(0) + ' m, ' + Math.round(m.couv * 100) + ' % de l\u2019axe, ' + m.c.longueur.toFixed(0) + ' m)';
+  // [v29] la qualite de la reconnaissance (ecart median, couverture) ne sert qu'au diagnostic :
+  // elle part au journal, plus a l'ecran. A l'ecran, le nom du circuit suffit.
+  document.getElementById('circInfo').textContent = '';
+  if (circVuId !== m.c.id + '|' + lap.num) {
+    circVuId = m.c.id + '|' + lap.num;
+    jrn(m.c.nom + ' reconnu au tour #' + lapNumAff(lap) + ' : ecart median ' + m.med.toFixed(0) + ' m, ' + Math.round(m.couv * 100) + ' % de l axe, ' + m.c.longueur.toFixed(0) + ' m');
+  }
   if (!res) { document.getElementById('tSect').innerHTML = ''; document.getElementById('circNote').textContent = 'Pas de base de temps dans la trace : partielles impossibles.'; return; }
   // le meilleur tour de cette voiture sur ce circuit, pour les ecarts
   var laps = (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap)), meilleurs = null, meilleurNum = null;   // [v21] dans la session
