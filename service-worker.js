@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'traclogics-mt-';
-const CACHE = PREFIX + 'v49';   // v49 : smart apprend sur la journee et conseille le pilotage
+const CACHE = PREFIX + 'v50';   // v50 : remise a zero du smart (vitesses), veille des temperatures sur la journee
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg', './circuits_index.csv', './circuits_offsets.csv'];
 
 self.addEventListener('install', (ev) => {
