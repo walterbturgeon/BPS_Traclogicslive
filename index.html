@@ -37,8 +37,12 @@
   .btn.warn { background:var(--warn); color:#fff; }
   .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   .small { color:var(--muted); font-size:.85em; }
-  .tabs { display:flex; gap:6px; margin:0 16px 12px; flex-wrap:wrap; }
-  .tab { background:var(--tab); border:1px solid var(--line); border-radius:10px; padding:8px 14px; cursor:pointer; min-width:120px; }
+  .tabs { display:flex; gap:6px; margin:0 16px 12px; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden;
+          scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch; scrollbar-width:thin; padding-bottom:2px; }
+  .tabs::-webkit-scrollbar { height:5px; }
+  .tabs::-webkit-scrollbar-thumb { background:var(--line); border-radius:3px; }
+  .tab { background:var(--tab); border:1px solid var(--line); border-radius:10px; padding:8px 14px; cursor:pointer;
+         min-width:120px; flex:0 0 auto; scroll-snap-align:start; }
   .tab.on { background:var(--ink); color:var(--bg); border-color:var(--ink); }
   .tab .nom { font-weight:600; }
   .tab .sub { font-size:.75em; opacity:.75; }
@@ -172,7 +176,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v32';
+var PAGE_VER = 'MT v33';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -625,6 +629,7 @@ function rendre0() {
     d.innerHTML = '<div class="nom"><span class="portee' + (portee ? ' ok' : '') + '"></span>' + v.nom + '</div><div class="sub">' + (details ? m : 'n° ' + v.num) + ' · ' + Object.keys(v.laps).length + ' tour(s)</div>';
     d.onclick = function () { vueMac = m; vueTour = null; rendre(); };
     tabs.appendChild(d);
+    if (m === vueMac) setTimeout(function () { try { d.scrollIntoView({ inline: 'nearest', block: 'nearest' }); } catch (e) {} }, 0);   // [v33]
   });
   document.getElementById('vide').style.display = ordreVoitures.length ? 'none' : '';
   document.getElementById('voiture').style.display = vueMac ? '' : 'none';
