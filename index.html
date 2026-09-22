@@ -247,7 +247,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v71';
+var PAGE_VER = 'MT v72';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -681,9 +681,11 @@ function tempSuite(v, lap, k, memo) {
   return suite;
 }
 function mediane(t) { if (!t.length) return null; var u = t.slice().sort(function (a, b) { return a - b; }); return u[Math.floor(u.length / 2)]; }
+function secMax(lap, ech, k) { var r = canResume(lap, ech, k); return r ? r.sMax : -1; }   // [v72] la seconde du maximum
+var alertesVues = [];   // [v72] les alertes du tour affiche, pour les poser sur la carte
 function alerteTemperatures(v, lap) {
   if (!lap.cat) return [];
-  var L = limites(v.mac), memo = {}, out = [];
+  var L = limites(v.mac), memo = {}, out = [], ech = canEchantillons(lap);   // [v72] situer l'alerte
   for (var k = 0; k < 8; k++) {
     var c = lap.cat.ch[k]; if (!c) continue;
     var mecanique = RE_TEMP.test(c.nom) && !RE_PAS_TEMP.test(c.nom);
@@ -695,7 +697,13 @@ function alerteTemperatures(v, lap) {
     if (maxi == null && lap.pv && lap.pv.items[k] && lap.pv.items[k].idx !== 255) maxi = lap.pv.items[k].max;
     if (maxi == null) continue;
     // rouge : la limite de la voiture
-    if (f && maxi >= L[f]) { out.push({ n: 3, txt: '\u26a0 ' + c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 limite ' + L[f] + ' \u00b0C atteinte' }); continue; }
+    if (f && maxi >= L[f]) {
+      var sLim = -1;   // [v72] la PREMIERE seconde au-dessus de la limite
+      for (var q3 = 0; q3 < ech.length; q3++) { var xq = canValeur(lap, ech, k, q3); if (xq != null && xq >= L[f]) { sLim = q3; break; } }
+      if (sLim < 0) sLim = secMax(lap, ech, k);
+      out.push({ n: 3, k: k, s: sLim, txt: '\u26a0 ' + c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 limite ' + L[f] + ' \u00b0C atteinte' });
+      continue;
+    }
     // jaune : la hausse de ce tour, comparee a l'habitude de la session
     // [v63] EN MODE NORMAL, RIEN D'AUTRE QUE LA LIMITE. La hausse inhabituelle et l'approche
     // sont de l'analyse : elles appartiennent au mode smart. En normal, la page ne parle que
@@ -706,14 +714,14 @@ function alerteTemperatures(v, lap) {
       var hab = mediane(avant);
       var seuil = Math.max(3, (hab == null ? 0 : Math.max(hab, 0)) + 3);
       if (hausse >= seuil) {
-        out.push({ n: 2, txt: c.nom + ' +' + Math.round(hausse) + ' \u00b0C ce tour'
+        out.push({ n: 2, k: k, s: secMax(lap, ech, k), txt: c.nom + ' +' + Math.round(hausse) + ' \u00b0C ce tour'
           + (hab != null ? ' \u00b7 habituel ' + (hab >= 0 ? '+' : '') + Math.round(hab) + ' \u00b0C/tour' : '')
           + ' \u00b7 ' + Math.round(maxi) + ' \u00b0C' + (f ? ' sur ' + L[f] : '') });
         continue;
       }
     }
     // jaune, en smart : la valeur approche la limite
-    if (smartOn && f && maxi >= L[f] - 5) out.push({ n: 1, txt: c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 \u00e0 ' + Math.round(L[f] - maxi) + ' \u00b0C de la limite' });
+    if (smartOn && f && maxi >= L[f] - 5) out.push({ n: 1, k: k, s: secMax(lap, ech, k), txt: c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 \u00e0 ' + Math.round(L[f] - maxi) + ' \u00b0C de la limite' });
   }
   out.sort(function (a, b) { return b.n - a.n; });
   return out;
@@ -1168,7 +1176,7 @@ function rendre0() {
   bloc.querySelectorAll('details.session').forEach(function (d) { d.querySelector('summary').onclick = function () { sessionsRepliees[d.getAttribute('data-cle')] = d.open; }; });   // au clic : l'etat d'avant = ce que le doigt replie
   var lap = vueLap;
   document.getElementById('tourCard').style.display = lap ? '' : 'none';
-  document.getElementById('valeursCard').style.display = lap ? '' : 'none';   // [v59]
+  document.getElementById('valeursCard').style.display = (lap && !smartOn) ? '' : 'none';   // [v59] ; [v72] rien en smart
   if (!lap) return;
   var laps = lapsSession(v, lap), sess = sessionDe(v, lap), best = sess ? sess.best : null;
   var i = laps.indexOf(lap), prec = i > 0 ? laps[i - 1] : null;
@@ -1179,6 +1187,7 @@ function rendre0() {
   // [v52] les limites de temperature : le message vit dans les deux modes
   limitesMaj();
   var al = document.getElementById('alerteTemp'), msgs = alerteTemperatures(v, lap);
+  alertesVues = msgs;   // [v72] la carte pose un point la ou chaque alerte s'est declenchee
   al.innerHTML = msgs.map(function (m) {
     return '<span class="bande" style="margin-left:0;background:' + (m.n === 3 ? 'var(--warn)' : '#c47f1b') + '">' + m.txt + '</span>';
   }).join(' ');
@@ -1361,11 +1370,11 @@ function dessiner(v, lap) {
   }
   g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.arc(X(pts[0].dx, pts[0].dy), Y(pts[0].dx, pts[0].dy), 5, 0, Math.PI * 2); g.fill(); g.stroke();
   // [v10] l'axe du circuit reconnu (fin, blanc) et les bornes des partielles (traits magenta)
-  if (circVue && circVue.axe && partiellesOn) {
+  if (circVue && circVue.axe && (partiellesOn || smartOn)) {
     g.save(); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1.5; g.setLineDash([6, 6]); g.beginPath();
     circVue.axe.forEach(function (p, i) { var x = X(p.dx, p.dy), y = Y(p.dx, p.dy); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); }); g.closePath(); g.stroke(); g.restore();
   }
-  if (circVue && circVue.bornes && partiellesOn) {
+  if (circVue && circVue.bornes && (partiellesOn || smartOn)) {
     var LET = circVue.lettre || 'P', DEMI = 16;   // [v68] 16 m de chaque cote de l'axe : la piste et sa marge
     var ligneBorne = function (dx, dy, px, py, nom) {
       var x1 = X(dx - px * DEMI, dy - py * DEMI), y1 = Y(dx - px * DEMI, dy - py * DEMI);
@@ -1393,7 +1402,7 @@ function dessiner(v, lap) {
   }
   // [v20] LES MAX DES CANAUX : un point de couleur la ou chaque canal a atteint son maximum (demande du 21 sept. 2026 :
   // les max seulement, pas les min). La position vient du temps : seconde du max -> instant -> point de la trace.
-  if (valeursOn && lap.can) {
+  if (valeursOn && !smartOn && lap.can) {   // [v72] pas de telemetrie sur la carte en smart
     var echM = canEchantillons(lap), trM = v.traces[lap.num], etiq = [];
     for (var kc = 0; kc < 8; kc++) {
       if (!canMontre[kc]) continue;   // [v31] ce canal est cache
@@ -1406,6 +1415,24 @@ function dessiner(v, lap) {
       g.save(); g.beginPath(); g.arc(e.x, e.y, 6, 0, Math.PI * 2); g.fillStyle = CAN_COULEURS[e.k]; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
       g.font = 'bold 11px system-ui'; var tw = g.measureText(e.txt).width, ex = Math.min(w - tw - 8, Math.max(2, e.x + 9)), ey = e.y + (i % 2 ? 16 : -8);
       g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(ex - 2, ey - 10, tw + 4, 13); g.fillStyle = CAN_COULEURS[e.k]; g.fillText(e.txt, ex, ey); g.restore();
+    });
+  }
+  if (smartOn && alertesVues && alertesVues.length) {   // [v72] un point la ou l'alerte s'est declenchee
+    var trA = v.traces[lap.num];
+    alertesVues.slice(0, 2).forEach(function (a2, i2) {
+      if (a2.s == null || a2.s < 0) return;
+      var pA = positionA(pts, trA && trA.intervalMs, a2.s * 1000); if (!pA) return;
+      var xA = X(pA.dx, pA.dy), yA = Y(pA.dx, pA.dy), cA = a2.n === 3 ? '#e4482f' : '#c47f1b';
+      var nomA = '\u26a0 ' + ((lap.cat && lap.cat.ch[a2.k] && lap.cat.ch[a2.k].nom) || 'alerte');
+      g.save();
+      g.beginPath(); g.arc(xA, yA, 7, 0, Math.PI * 2); g.fillStyle = cA; g.fill();
+      g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
+      g.font = 'bold 11px system-ui';
+      var twA = g.measureText(nomA).width;
+      var bxA = Math.min(w - twA - 8, Math.max(2, xA + 11)), byA = Math.min(h - 4, Math.max(12, yA + (i2 % 2 ? 18 : -7)));
+      g.fillStyle = 'rgba(0,0,0,0.65)'; g.beginPath(); g.roundRect(bxA - 4, byA - 10, twA + 8, 14, 3); g.fill();
+      g.fillStyle = cA; g.fillText(nomA, bxA, byA);
+      g.restore();
     });
   }
   // la boussole : une fleche vers le nord, en haut a droite
@@ -1422,7 +1449,7 @@ function dessiner(v, lap) {
     // [v32] sous la vitesse, les canaux CHOISIS (pastille allumee) a CE point du tour
     var txt = pv.kmh + ' km/h' + (dvs ? ' (' + (dvs[pointVu] >= 0 ? '+' : '') + dvs[pointVu].toFixed(0) + ')' : '');
     var trV = v.traces[lap.num], tMs = pointVu * ((trV && trV.intervalMs) || 500), echV = canEchantillons(lap), lignes = [];
-    if (valeursOn && lap.can) for (var kv = 0; kv < 8; kv++) {
+    if (valeursOn && !smartOn && lap.can) for (var kv = 0; kv < 8; kv++) {
       if (!canMontre[kv]) continue;
       var xv = canValeurA(lap, echV, kv, tMs); if (xv == null) continue;
       var cv = lap.cat && lap.cat.ch[kv];
@@ -1819,7 +1846,10 @@ function circuitRendre(v, lap) {
   if (!ref) ci.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
   else ci.innerHTML = 'vs <b>#' + lapNumAff(ref) + '</b> (' + duree(ref.dureeMs) + ', ' + refMot(lap, ref) + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref.dureeMs) + '</b>' : '')
       + (refSect ? ' · gagne ' + (gagne.length ? gagne.join(' ') : '\u2014') + ', perd ' + (perd.length ? perd.join(' ') : '\u2014') : '');
-  document.getElementById('partBloc').style.display = partiellesOn ? '' : 'none';
+  document.getElementById('partBloc').style.display = (partiellesOn || smartOn) ? '' : 'none';
+  document.getElementById('tSect').style.display = (partiellesOn && !smartOn) ? '' : 'none';         // [v72]
+  document.getElementById('circNote').style.display = smartOn ? 'none' : '';                          // [v72]
+  document.getElementById('partOn').parentElement.style.display = smartOn ? 'none' : '';              // [v72]
   document.getElementById('circNote').textContent = 'Bornes à ' + Math.round(res.L / secteursN) + ' m depuis la ligne du tour, dans le sens de roulage (' + (res.sensPos ? m.c.sens : (m.c.sens === 'horaire' ? 'antihoraire' : 'horaire')) + '). Précision : celle de la trace (un point / ' + tr.intervalMs + ' ms).';
   // les bornes pour la carte : abscisse -> point de l'axe -> repere du tour
   var bornes = [];
