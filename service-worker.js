@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'traclogics-mt-';
-const CACHE = PREFIX + 'v64';   // v64 : trajectoire decalee dans une section (depassement ?)
+const CACHE = PREFIX + 'v65';   // v65 : un tour hors analyse ne recoit pas de verdict
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg', './circuits_index.csv', './circuits_offsets.csv'];
 
 self.addEventListener('install', (ev) => {

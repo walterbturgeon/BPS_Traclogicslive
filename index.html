@@ -248,7 +248,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v64';
+var PAGE_VER = 'MT v65';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1662,6 +1662,7 @@ function circuitRendre(v, lap) {
   var ref = compReference(v, lap), refSect = null, refStats = null;
   if (ref) { var pr = traceEntiere(v.traces[ref.num]), mr = circuitPourTour(ref, pr); if (mr && mr.c.id === m.c.id) { var rr = secteursCalculer(ref, pr, mr, secteursN, v.traces[ref.num].intervalMs, bornesV); if (rr) { refSect = rr.sect; refStats = smartOn ? smartStats(ref, pr, rr, v.traces[ref.num], mr) : null; } } }
   var stats = smartOn ? smartStats(lap, pts, res, tr, m) : null;
+  var horsCeTour = smartOn ? horsAnalyse(v, lap) : null;   // [v65]
   // [v64] l'ecart de trajectoire : ce tour contre l'habitude de la journee, section par section
   var decal = [];
   if (smartOn && stats) {
@@ -1693,9 +1694,10 @@ function circuitRendre(v, lap) {
           ? (smartOn ? '<span style="color:' + (x - mb <= 100 ? 'var(--ok)' : 'var(--warn)') + ';font-weight:600">' + ecartTexte(x - mb) + '</span>'
                      : (x - mb <= 0 ? '<span style="color:var(--ok)">' : '') + ecartTexte(x - mb) + (x - mb <= 0 ? '</span>' : ''))
           : '\u2014') + '</td><td class="small">' + (meilleurNum && meilleurNum[i] != null ? '#' + lapNumAff(v.laps[meilleurNum[i]]) : '') + '</td>'
-      + (smartOn ? '<td class="small">' + (decal[i] != null && Math.abs(decal[i]) >= 3
+      + (smartOn ? '<td class="small">' + (horsCeTour ? '<span style="opacity:.6">hors analyse</span>'
+        : (decal[i] != null && Math.abs(decal[i]) >= 3
           ? 'trajectoire décalée de ' + Math.abs(decal[i]).toFixed(1).replace('.', ',') + ' m (dépassement ?)'
-          : smartPourquoi(x, mb, stats && stats[i], meilleurStats && meilleurStats[i], dr, refStats && refStats[i])) + '</td>' : '') + '</tr>';
+          : smartPourquoi(x, mb, stats && stats[i], meilleurStats && meilleurStats[i], dr, refStats && refStats[i]))) + '</td>' : '') + '</tr>';
   });
   document.getElementById('tSect').innerHTML = h;
   // [v44] le tour ideal et la phrase qui dit ou est le temps
@@ -1709,7 +1711,11 @@ function circuitRendre(v, lap) {
     var cp = document.getElementById('tPotentiel');   // [v46] la case des grands chiffres
     if (complet && lap.dureeMs != null) { cp.textContent = ecartTexte(ideal - lap.dureeMs); cp.style.color = (lap.dureeMs - ideal) > 500 ? 'var(--warn)' : 'var(--ok)'; }
     else { cp.textContent = '—'; cp.style.color = ''; }
-    if (pireI >= 0 && pire > 100) {
+    if (horsCeTour) {   // [v65] ni cause ni conseil : on dit pourquoi ce tour ne compte pas
+      bande.textContent = 'tour hors analyse · ' + horsCeTour;
+      bande.style.background = 'var(--muted)';
+      bande.style.display = '';
+    } else if (pireI >= 0 && pire > 100) {
       var a = stats && stats[pireI], b = refStats && refStats[pireI];
       var cause = (a && b) ? smartCause(pire, a, b) : '';
       var conseil = (a && meilleurStats && meilleurStats[pireI]) ? smartConseil(res.sect[pireI] - (meilleurs ? meilleurs[pireI] : res.sect[pireI]), a, meilleurStats[pireI]) : '';
@@ -1722,11 +1728,11 @@ function circuitRendre(v, lap) {
       bande.style.background = /dépassement/.test(motBande) ? '#6b4ea8' : (/mécanique/.test(motBande) ? 'var(--warn)' : (cause === 'levé de pied' ? '#c47f1b' : '#8a6d1f'));
       bande.style.display = '';
       txt += (txt ? ' · ' : '') + '<b>' + ((bornesV ? 'S' : 'P') + (pireI + 1)) + '</b> fait <b>perdre ' + (pire / 1000).toFixed(2).replace('.', ',') + ' s</b>'
-           + (cause && cause !== 'pilotage' ? ' · ' + cause : (conseil ? ' · ' + conseil : ''))
+           + (motBande ? ' · ' + motBande : '')   // [v65] la phrase dit la meme chose que la bande
            + (a && b && a.kmhMin != null && b.kmhMin != null ? ' · mini ' + Math.round(a.kmhMin) + ' contre ' + Math.round(b.kmhMin) + ' km/h' : '');
     }
     smartTemps(v, lap).forEach(function (t) { txt += (txt ? ' · ' : '') + '<b style="color:var(--warn)">' + t + '</b>'; });   // [v50]
-    if (bande.style.display === 'none' && smartOn) {   // [v64] un decalage sans perte de temps : on le dit
+    if (!horsCeTour && bande.style.display === 'none' && smartOn) {   // [v64] un decalage sans perte de temps : on le dit
       var iD = -1, dMax = 0;
       decal.forEach(function (d2, i) { if (d2 != null && Math.abs(d2) > Math.abs(dMax)) { dMax = d2; iD = i; } });
       if (iD >= 0 && Math.abs(dMax) >= 3) {
@@ -1734,7 +1740,7 @@ function circuitRendre(v, lap) {
         bande.style.background = '#6b4ea8'; bande.style.display = '';
       }
     }
-    if (bande.style.display === 'none' && meilleurs && stats) {   // [v62] rien de perdu : on dit le gain
+    if (!horsCeTour && bande.style.display === 'none' && meilleurs && stats) {   // [v62] rien de perdu : on dit le gain
       var meilleureI = -1, gainMax = 0;
       res.sect.forEach(function (x, i) {
         var mb2 = meilleurs[i];
