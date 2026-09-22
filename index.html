@@ -220,7 +220,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v48';
+var PAGE_VER = 'MT v49';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -581,7 +581,7 @@ function smartBascule() {
   smartOn = document.getElementById('smartOn').checked;
   smartVuMaj();
   try { localStorage.setItem('mt_smart', smartOn ? '1' : '0'); } catch (e) {}
-  smartBornes = {}; rendre();
+  smartBornes = {}; smartCacheStats = {}; rendre();
 }
 function smartCanal(lap, re) { if (!lap.cat) return -1; for (var k = 0; k < 8; k++) { var c = lap.cat.ch[k]; if (c && re.test(c.nom)) return k; } return -1; }
 function meteoCompatible(a, b) {
@@ -630,23 +630,77 @@ function smartVirages(v, ref, m) {
   smartBornes[cle] = bornes.length ? bornes : null;
   return smartBornes[cle];
 }
-// par section : vitesse minimale, papillon moyen, regime moyen
+// [v49] LES QUATRE FAITS D'UNE SECTION. Tout le conseil de pilotage en sort :
+//   freinage  : l'abscisse ou la vitesse commence a tomber avant le point le plus lent
+//   kmhMin    : la vitesse au point le plus lent (ce que la ligne fait passer)
+//   gazPt     : l'abscisse ou le pied revient (papillon au-dessus de la moitie, sinon la
+//               vitesse qui remonte deux points de suite)
+//   chemin    : la longueur du chemin parcouru DANS la section -- plus court = ligne plus serree
+// Avec le papillon et le regime moyens, ils servent aussi a nommer une cause (mecanique, leve).
+var smartCacheStats = {};
 function smartStats(lap, pts, res, trace) {
+  var cle = lap.num + '|' + res.bornes.map(function (b) { return Math.round(b); }).join(',');
+  if (smartCacheStats[cle]) return smartCacheStats[cle];
   var ech = canEchantillons(lap), gaz = smartCanal(lap, RE_GAZ), rpm = smartCanal(lap, RE_RPM);
-  var N = res.sect.length, out = [];
-  for (var j = 0; j < N; j++) out.push({ kmhMin: null, sg: 0, ng: 0, sr: 0, nr: 0 });
+  var N = res.sect.length, out = [], par = [];
+  for (var j = 0; j < N; j++) { out.push({ kmhMin: null, iMin: -1, sg: 0, ng: 0, sr: 0, nr: 0, chemin: 0, freinage: null, gazPt: null, vSortie: null }); par.push([]); }
   for (var i = 0; i < pts.length; i++) {
     var j2 = 0; while (j2 < res.bornes.length && res.r[i] >= res.bornes[j2]) j2++;
-    var o = out[Math.min(j2, N - 1)];
-    if (o.kmhMin == null || pts[i].kmh < o.kmhMin) o.kmhMin = pts[i].kmh;
+    var k = Math.min(j2, N - 1), o = out[k];
+    par[k].push(i);
+    if (o.kmhMin == null || pts[i].kmh < o.kmhMin) { o.kmhMin = pts[i].kmh; o.iMin = i; }
     var t = i * (trace.intervalMs || 500);
     if (gaz >= 0) { var g = canValeurA(lap, ech, gaz, t); if (g != null) { o.sg += g; o.ng++; } }
     if (rpm >= 0) { var q2 = canValeurA(lap, ech, rpm, t); if (q2 != null) { o.sr += q2; o.nr++; } }
   }
-  out.forEach(function (o) { o.gaz = o.ng ? o.sg / o.ng : null; o.rpm = o.nr ? o.sr / o.nr : null; });
+  out.forEach(function (o, k2) {
+    o.gaz = o.ng ? o.sg / o.ng : null; o.rpm = o.nr ? o.sr / o.nr : null;
+    var idx = par[k2]; if (!idx.length) return;
+    for (var a = 1; a < idx.length; a++) o.chemin += Math.hypot(pts[idx[a]].dx - pts[idx[a - 1]].dx, pts[idx[a]].dy - pts[idx[a - 1]].dy);
+    o.vSortie = pts[idx[idx.length - 1]].kmh;
+    var pos = idx.indexOf(o.iMin); if (pos < 0) return;
+    var vMax = 0; for (var b = 0; b <= pos; b++) if (pts[idx[b]].kmh > vMax) vMax = pts[idx[b]].kmh;
+    for (var c = pos; c >= 0; c--) if (pts[idx[c]].kmh >= vMax * 0.97) { o.freinage = res.r[idx[c]]; break; }   // le dernier point encore lance
+    for (var d = pos; d < idx.length; d++) {
+      var ii = idx[d], gg = gaz >= 0 ? canValeurA(lap, ech, gaz, ii * (trace.intervalMs || 500)) : null;
+      var monte = d + 2 < idx.length && pts[idx[d + 1]].kmh > pts[ii].kmh && pts[idx[d + 2]].kmh > pts[idx[d + 1]].kmh;
+      if ((gg != null && gg > 50) || (gg == null && monte)) { o.gazPt = res.r[ii]; break; }
+    }
+  });
+  smartCacheStats[cle] = out;
   return out;
 }
+// [v49] LE CONSEIL DE PILOTAGE. On compare la section a CELLE QUI DETIENT LE MEILLEUR TEMPS du
+// jour, et on dit par quoi la difference passe. Deux faits au plus : on parle a un pilote entre
+// deux relais, pas a un ingenieur devant un ecran.
+function smartConseil(dt, a, b) {
+  if (!a || !b || dt == null) return '';
+  var gain = dt < 0, faits = [];
+  var dFr = (a.freinage != null && b.freinage != null) ? a.freinage - b.freinage : null;   // + = tu freines plus loin
+  var dMin = (a.kmhMin != null && b.kmhMin != null) ? a.kmhMin - b.kmhMin : null;
+  var dGz = (a.gazPt != null && b.gazPt != null) ? a.gazPt - b.gazPt : null;               // - = tu remets les gaz plus tot
+  var dCh = (a.chemin && b.chemin) ? a.chemin - b.chemin : null;                           // - = chemin plus court
+  if (dFr != null && Math.abs(dFr) >= 5) faits.push({ p: Math.abs(dFr), t: 'freinage ' + Math.round(Math.abs(dFr)) + ' m plus ' + (dFr > 0 ? 'tard' : 'tot') });
+  if (dMin != null && Math.abs(dMin) >= 2) faits.push({ p: Math.abs(dMin) * 3, t: 'vitesse en courbe ' + (dMin > 0 ? '+' : '') + Math.round(dMin) + ' km/h' });
+  if (dCh != null && Math.abs(dCh) >= 5) faits.push({ p: Math.abs(dCh), t: 'ligne ' + Math.round(Math.abs(dCh)) + ' m plus ' + (dCh < 0 ? 'courte' : 'longue') });
+  if (dGz != null && Math.abs(dGz) >= 5) faits.push({ p: Math.abs(dGz), t: 'gaz ' + Math.round(Math.abs(dGz)) + ' m plus ' + (dGz < 0 ? 'tot' : 'tard') });
+  if (!faits.length) return gain ? 'un peu mieux, sans fait marquant' : 'rien de marquant : trajectoire ou regularite';
+  faits.sort(function (x, y) { return y.p - x.p; });
+  return faits.slice(0, 2).map(function (f) { return f.t; }).join(' · ');
+}
+// la position sur la trace a l'instant t (ms depuis le depart), par interpolation
 // la cause d'une section perdue, selon la regle du pilote
+// [v49] la colonne « Pourquoi » : la cause quand la voiture est en faute, sinon le conseil de
+// pilotage, compare a la section la mieux faite de la journee.
+function smartPourquoi(x, mb, a, best, dr, ref) {
+  if (x == null || mb == null || !a || !best) return '';
+  var d = x - mb;
+  var cause = (dr != null && ref) ? smartCause(dr, a, ref) : '';
+  if (cause && cause !== 'pilotage') return cause;            // mecanique ou leve de pied : on le dit d'abord
+  if (Math.abs(d) < 100) return 'au niveau du meilleur';       // moins de 0,1 s : rien a dire
+  var c = smartConseil(d, a, best);
+  return (d < 0 ? '\u2713 ' : '') + (c || '');
+}
 function smartCause(dt, a, b) {
   if (dt == null || dt < 300 || !a || !b) return '';
   if (a.gaz == null || b.gaz == null) return '';            // sans papillon, aucune cause n'est dite
@@ -1371,20 +1425,22 @@ function circuitRendre(v, lap) {
   }
   if (!res) { document.getElementById('tSect').innerHTML = ''; document.getElementById('circNote').textContent = 'Pas de base de temps dans la trace : partielles impossibles.'; return; }
   // le meilleur tour de cette voiture sur ce circuit, pour les ecarts
-  var laps = (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap)), meilleurs = null, meilleurNum = null;   // [v21] dans la session
+  var laps = smartOn ? lapsJour(v, lap) : (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap));   // [v49] smart apprend sur la journee
+  var meilleurs = null, meilleurNum = null, meilleurStats = null;
   laps.forEach(function (l) {
     if (l.dureeMs == null) return; var p2 = traceEntiere(v.traces[l.num]); var m2 = circuitPourTour(l, p2); if (!m2 || m2.c.id !== m.c.id) return;
     if (smartOn && (!meteoCompatible(lap, l) || horsAnalyse(v, l))) return;   // [v44] meteo voisine, tours propres
     var r2 = secteursCalculer(l, p2, m2, secteursN, v.traces[l.num].intervalMs, bornesV); if (!r2) return;
-    if (!meilleurs) { meilleurs = r2.sect.slice(); meilleurNum = {}; r2.sect.forEach(function (x, i) { meilleurNum[i] = l.num; }); }
-    else r2.sect.forEach(function (x, i) { if (x != null && (meilleurs[i] == null || x < meilleurs[i])) { meilleurs[i] = x; meilleurNum[i] = l.num; } });
+    var st2 = smartOn ? smartStats(l, p2, r2, v.traces[l.num]) : null;
+    if (!meilleurs) { meilleurs = r2.sect.slice(); meilleurNum = {}; meilleurStats = {}; r2.sect.forEach(function (x, i) { meilleurNum[i] = l.num; if (st2) meilleurStats[i] = st2[i]; }); }
+    else r2.sect.forEach(function (x, i) { if (x != null && (meilleurs[i] == null || x < meilleurs[i])) { meilleurs[i] = x; meilleurNum[i] = l.num; if (st2) meilleurStats[i] = st2[i]; } });
   });
   // [v15] les partielles du tour de reference, pour la colonne « vs #ref »
   var ref = compReference(v, lap), refSect = null, refStats = null;
   if (ref) { var pr = traceEntiere(v.traces[ref.num]), mr = circuitPourTour(ref, pr); if (mr && mr.c.id === m.c.id) { var rr = secteursCalculer(ref, pr, mr, secteursN, v.traces[ref.num].intervalMs, bornesV); if (rr) { refSect = rr.sect; refStats = smartOn ? smartStats(ref, pr, rr, v.traces[ref.num]) : null; } } }
   var stats = smartOn ? smartStats(lap, pts, res, tr) : null;
   var h = '<tr><th>' + (smartOn && bornesV ? 'Section' : 'Partielle') + '</th><th class="num">Temps</th>' + (ref ? '<th class="num">vs #' + lapNumAff(ref) + '</th>' : '')
-        + '<th class="num">Écart vs meilleure</th><th class="small">Meilleure</th>' + (smartOn ? '<th class="small">Cause</th>' : '') + '</tr>';
+        + '<th class="num">Écart vs meilleure</th><th class="small">Meilleure</th>' + (smartOn ? '<th class="small">Pourquoi</th>' : '') + '</tr>';
   var gagne = [], perd = [], pire = null, pireI = -1;
   res.sect.forEach(function (x, i) {
     var mb = meilleurs ? meilleurs[i] : null, rs = refSect ? refSect[i] : null, dr = (x != null && rs != null) ? x - rs : null;
@@ -1398,7 +1454,7 @@ function circuitRendre(v, lap) {
           ? (smartOn ? '<span style="color:' + (x - mb <= 100 ? 'var(--ok)' : 'var(--warn)') + ';font-weight:600">' + ecartTexte(x - mb) + '</span>'
                      : (x - mb <= 0 ? '<span style="color:var(--ok)">' : '') + ecartTexte(x - mb) + (x - mb <= 0 ? '</span>' : ''))
           : '\u2014') + '</td><td class="small">' + (meilleurNum && meilleurNum[i] != null ? '#' + lapNumAff(v.laps[meilleurNum[i]]) : '') + '</td>'
-      + (smartOn ? '<td class="small">' + (stats && refStats ? smartCause(dr, stats[i], refStats[i]) : '') + '</td>' : '') + '</tr>';
+      + (smartOn ? '<td class="small">' + smartPourquoi(x, mb, stats && stats[i], meilleurStats && meilleurStats[i], dr, refStats && refStats[i]) + '</td>' : '') + '</tr>';
   });
   document.getElementById('tSect').innerHTML = h;
   // [v44] le tour ideal et la phrase qui dit ou est le temps
@@ -1415,14 +1471,16 @@ function circuitRendre(v, lap) {
     if (pireI >= 0 && pire > 100) {
       var a = stats && stats[pireI], b = refStats && refStats[pireI];
       var cause = (a && b) ? smartCause(pire, a, b) : '';
+      var conseil = (a && meilleurStats && meilleurStats[pireI]) ? smartConseil(res.sect[pireI] - (meilleurs ? meilleurs[pireI] : res.sect[pireI]), a, meilleurStats[pireI]) : '';
       // [v47] la bande a cote du nom : la section, l'ecart, la cause
       var nomP = (bornesV ? 'S' : 'P') + (pireI + 1);
-      bande.textContent = nomP + ' · ' + ecartTexte(pire) + (cause ? ' · ' + cause : '');
+      var motBande = (cause && cause !== 'pilotage') ? cause : (conseil || 'pilotage');
+      bande.textContent = nomP + ' · ' + ecartTexte(pire) + ' · ' + motBande;
       bande.style.background = /m\u00e9canique/.test(cause) ? 'var(--warn)' : (cause === 'lev\u00e9 de pied' ? '#c47f1b' : 'var(--accent)');
       bande.style.display = '';
       txt += (txt ? ' · ' : '') + '<b>' + ((bornesV ? 'S' : 'P') + (pireI + 1)) + '</b> te coûte <b>' + ecartTexte(pire) + '</b>'
-           + (a && b && a.kmhMin != null && b.kmhMin != null ? ' · mini ' + Math.round(a.kmhMin) + ' contre ' + Math.round(b.kmhMin) + ' km/h' : '')
-           + (cause ? ' · ' + cause : '');
+           + (cause && cause !== 'pilotage' ? ' · ' + cause : (conseil ? ' · ' + conseil : ''))
+           + (a && b && a.kmhMin != null && b.kmhMin != null ? ' · mini ' + Math.round(a.kmhMin) + ' contre ' + Math.round(b.kmhMin) + ' km/h' : '');
     }
     var hs = horsAnalyse(v, lap);
     if (hs) txt += (txt ? ' · ' : '') + '<span class="small">ce tour est hors analyse (' + hs + ')</span>';
