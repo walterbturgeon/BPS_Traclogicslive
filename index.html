@@ -257,7 +257,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v79';
+var PAGE_VER = 'MT v80';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1474,11 +1474,15 @@ function dessiner(v, lap) {
   for (var i = 1; i < pts.length; i++) {
     if (smartOn && smartSectionVue && smartSectionVue.i0 != null) {   // [v66] une seule section en couleur
       var dedans = i >= smartSectionVue.i0 && i <= smartSectionVue.i1;
-      g.strokeStyle = dedans ? smartSectionVue.couleur : 'rgba(150,150,150,0.55)';
-      g.lineWidth = dedans ? 5 : 3;
-    } else g.strokeStyle = dvs ? couleurDelta((dvs[i - 1] + dvs[i]) / 2) : couleur((pts[i - 1].kmh + pts[i].kmh) / 2, vmin, vmax);
+      var zone = smartSectionVue.z0 != null && i >= smartSectionVue.z0 && i <= smartSectionVue.z1;   // [v80]
+      var montre = smartSectionVue.z0 != null ? zone : dedans;   // [v80] la zone seule, si on la connait
+      g.strokeStyle = montre ? smartSectionVue.couleur : 'rgba(150,150,150,0.55)';
+      g.globalAlpha = 1;
+      g.lineWidth = montre ? 6 : 3;
+    } else { g.globalAlpha = 1; g.strokeStyle = dvs ? couleurDelta((dvs[i - 1] + dvs[i]) / 2) : couleur((pts[i - 1].kmh + pts[i].kmh) / 2, vmin, vmax); }
     g.beginPath(); g.moveTo(X(pts[i - 1].dx, pts[i - 1].dy), Y(pts[i - 1].dx, pts[i - 1].dy)); g.lineTo(X(pts[i].dx, pts[i].dy), Y(pts[i].dx, pts[i].dy)); g.stroke();
   }
+  g.globalAlpha = 1;   // [v80]
   g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.arc(X(pts[0].dx, pts[0].dy), Y(pts[0].dx, pts[0].dy), 5, 0, Math.PI * 2); g.fill(); g.stroke();
   // [v10] l'axe du circuit reconnu (fin, blanc) et les bornes des partielles (traits magenta)
   if (circVue && circVue.axe) {   // [v76] l'axe et les bornes, dans les deux modes
@@ -1580,7 +1584,7 @@ function dessiner(v, lap) {
   var t = v.traces[lap.num], manque = t ? t.nb - t.parts.filter(function (p) { return p; }).length : 0;
   lg.textContent = (dvs ? 'Delta de vitesse vs #' + lapNumAff(compRef) + ' : vert = plus vite, rouge = moins vite, gris = pareil (±10 km/h). ' : 'Vert = lent, rouge = rapide (' + Math.round(vmin) + ' a ' + Math.round(vmax) + ' km/h). ') + pts.length + ' points' + (manque > 0 ? ' — ' + manque + ' morceau(x) manquant(s).' : '') + (carte.zoom !== 1 ? ' · zoom ×' + carte.zoom.toFixed(1) : '');
   if (smartOn && smartSectionVue && smartSectionVue.i0 != null)
-    lg.textContent = 'Mode smart : seule la section dont parle la bande est en couleur. ' + pts.length + ' points';
+    lg.textContent = 'Mode smart : seule la zone qui porte l\u2019ecart de la bande est en couleur. ' + pts.length + ' points';
   if (satVoulu && cle && !satOk) satPlanifier(lap, cle);
 }
 function satBascule() {
@@ -1764,6 +1768,31 @@ function circProjeterSigne(k, x, y) {
       var croix = ex * (y - a.y) - ey * (x - a.x);   // le signe dit le cote
       best.d = d; best.s = k.cum[i] + t * Math.sqrt(l2); best.lat = croix >= 0 ? d : -d;
     }
+  }
+  return best;
+}
+// [v80] le temps mis pour atteindre la distance s, par interpolation sur la trace
+function tempsADistance(r, intervalMs, s2) {
+  var n = r.length; if (!n || !intervalMs) return null;
+  if (s2 <= r[0]) return 0;
+  if (s2 >= r[n - 1]) return (n - 1) * intervalMs;
+  var lo = 0, hi = n - 1;
+  while (hi - lo > 1) { var mi = (lo + hi) >> 1; if (r[mi] <= s2) lo = mi; else hi = mi; }
+  var f = (s2 - r[lo]) / Math.max(r[hi] - r[lo], 1e-6);
+  return (lo + f) * intervalMs;
+}
+// [v80] la fenetre de la section ou l'ecart de temps bouge le plus
+function zoneEcart(rA, msA, rB, msB, b0, b1, perte) {
+  if (!rA || !rB || !msA || !msB || b1 - b0 < 80) return null;
+  var W = Math.max(60, (b1 - b0) * 0.2), pas = Math.max(8, (b1 - b0) / 40), best = null;
+  function ecart(x) {
+    var ta = tempsADistance(rA, msA, x), tb = tempsADistance(rB, msB, x);
+    return (ta == null || tb == null) ? null : ta - tb;
+  }
+  for (var a = b0; a + W <= b1 + 1e-6; a += pas) {
+    var e1 = ecart(a), e2 = ecart(a + W); if (e1 == null || e2 == null) continue;
+    var d = e2 - e1, note = perte ? d : -d;
+    if (!best || note > best.note) best = { a: a, b: a + W, d: d, note: note };
   }
   return best;
 }
@@ -1974,6 +2003,19 @@ function circuitRendre(v, lap) {
     var i0 = -1, i1 = -1;
     for (var ii = 0; ii < res.r.length; ii++) { if (res.r[ii] >= b0 && res.r[ii] <= b1) { if (i0 < 0) i0 = ii; i1 = ii; } }
     if (i0 < 0) smartSectionVue = null; else { smartSectionVue.i0 = i0; smartSectionVue.i1 = i1; }
+    // [v80] dans la section, la fenetre qui porte le plus gros morceau de l'ecart
+    if (smartSectionVue && ref && typeof rr !== 'undefined' && rr && rr.r) {
+      var perteZ = !/gagne/.test(bande.textContent);
+      var z = zoneEcart(res.r, tr.intervalMs, rr.r, v.traces[ref.num].intervalMs, b0, b1, perteZ);
+      if (z && Math.abs(z.d) >= 120) {
+        var z0 = -1, z1 = -1;
+        for (var iz = 0; iz < res.r.length; iz++) { if (res.r[iz] >= z.a && res.r[iz] <= z.b) { if (z0 < 0) z0 = iz; z1 = iz; } }
+        if (z0 >= 0) {
+          smartSectionVue.z0 = z0; smartSectionVue.z1 = z1; smartSectionVue.zMid = (z0 + z1) >> 1;
+          smartSectionVue.zTxt = (z.d > 0 ? '\u2212' : '+') + (Math.abs(z.d) / 1000).toFixed(2).replace('.', ',') + ' s ici';
+        }
+      }
+    }
   }
   var ci = document.getElementById('compInfo');
   if (!ref) ci.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
