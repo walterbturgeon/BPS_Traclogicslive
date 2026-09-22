@@ -153,6 +153,7 @@
       <button class="btn sec" onclick="alerteEssai()">Essayer</button></div>
     <div class="row" style="margin-top:8px"><label class="small"><input type="checkbox" id="ecranOn" checked onchange="ecranBascule()"> Garder l'écran allumé</label>
       <span class="small" id="alerteNote" style="opacity:.8"></span></div>
+    <div class="small" id="vibrEtat" style="margin-top:6px;opacity:.8"></div>
   </div>
   <div class="row" style="margin-bottom:10px"><span class="small">Thème</span>
     <button class="btn sec icone" id="btnTheme" onclick="themeSuivant()" aria-label="Thème">◐</button>
@@ -255,7 +256,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v73';
+var PAGE_VER = 'MT v74';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -500,9 +501,28 @@ function bip(ms, freq) {
   o.connect(gg); gg.connect(c.destination);
   o.start(t0); o.stop(t0 + ms / 1000 + 0.05);
 }
-function alerteSignal() {   // limite atteinte : deux bips graves longs, plus la vibration
-  if (sonOn) { bip(650, 300); setTimeout(function () { bip(650, 300); }, 800); }
-  if (vibrOn && navigator.vibrate) { try { navigator.vibrate([600, 200, 600]); } catch (e) {} }
+function vibrer() {   // [v74] rend ce que le navigateur repond : true = commande acceptee
+  if (!vibrOn) return true;   // coupee par l'utilisateur : ce n'est pas un echec
+  if (!navigator.vibrate) { vibrEtat('non supportée par ce navigateur'); return false; }
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) {   // [v74] Chrome refuse avant le premier geste
+    vibrEtat('en attente d’un premier toucher dans la page');
+    return false;
+  }
+  var ok = false;
+  try { ok = navigator.vibrate([600, 200, 600]) !== false; } catch (e) { ok = false; }
+  vibrEtat(ok ? 'commande acceptée — si rien ne bouge, la tablette n\u2019a pas de moteur'
+             : 'refusée par le système (silencieux, ou pas de moteur)');
+  return ok;
+}
+function vibrEtat(txt) {
+  var n = document.getElementById('vibrEtat'); if (n) n.textContent = 'vibration : ' + txt;
+  if (vibrDit !== txt) { vibrDit = txt; jrn('Vibration : ' + txt); }
+}
+var vibrDit = '';
+function alerteSignal() {   // limite atteinte : des bips graves longs, plus la vibration
+  var vOk = vibrer();
+  var n = (vibrOn && vOk) ? 2 : 3;   // [v74] sans vibration, un bip de plus
+  if (sonOn) for (var i = 0; i < n; i++) (function (k) { setTimeout(function () { bip(650, 300); }, k * 800); })(i);
 }
 function alerteVeille(mac) {   // le DERNIER tour de la voiture qui vient de parler
   var v = voitures[mac]; if (!v) return;
@@ -535,7 +555,7 @@ function ecranBascule() {
   try { localStorage.setItem('mt_ecran', ecranOn ? '1' : '0'); } catch (e) {}
   if (ecranOn) ecranTenir(); else ecranLacher();
 }
-function alerteEssai() { audioPret(); alerteSignal(); }   // pour regler le volume avant la seance
+function alerteEssai() { audioPret(); alerteSignal(); }   // pour regler le volume avant la seance ; [v74] dit aussi l'etat de la vibration
 document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') ecranTenir(); });
 document.addEventListener('pointerdown', function () { audioPret(); ecranTenir(); });   // le geste qui ouvre le son
 function macTexte(a) { var s = []; for (var i = 0; i < 6; i++) s.push(('0' + a[i].toString(16)).slice(-2).toUpperCase()); return s.join(':'); }
@@ -1975,9 +1995,11 @@ try {
   document.getElementById('sonOn').checked = sonOn; document.getElementById('vibrOn').checked = vibrOn; document.getElementById('ecranOn').checked = ecranOn;
 } catch (e) {}
 { var notes = [];
-  if (!navigator.vibrate) notes.push('vibration non supportée ici');
   if (!navigator.wakeLock) notes.push('écran allumé non supporté ici');
   document.getElementById('alerteNote').textContent = notes.join(' · ');
+  document.getElementById('vibrEtat').textContent = navigator.vibrate
+    ? 'vibration : supportée par le navigateur — touche Essayer pour la sentir'
+    : 'vibration : non supportée par ce navigateur (iOS, ou tablette sans moteur)';
 }
 try { partiellesOn = localStorage.getItem('mt_part') !== '0'; valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode; document.getElementById('partOn').checked = partiellesOn;
 circuitsCharger();
