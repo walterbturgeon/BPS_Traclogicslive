@@ -212,7 +212,7 @@
     <div class="row" style="margin-top:8px"><label class="small">Comparer à <select id="compSel" onchange="compChoisir()"><option value="meilleur">meilleur tour de la session</option><option value="jour">meilleur tour de la journée</option><option value="precedent">tour précédent</option><option value="aucun">rien (vitesse)</option></select></label> <span class="small" id="compInfo"></span></div>
     <div id="circBloc" style="margin-top:12px;display:none">
       <div class="row" style="justify-content:space-between">
-        <label class="small"><input type="checkbox" id="partOn" checked onchange="partiellesBascule()"> Partielles</label>
+        <span class="small" id="partTitre">Partielles</span>
         <div style="margin-left:auto;text-align:right"><b id="circNom"></b> <span class="small" id="circInfo"></span></div>
       </div>
       <div id="partBloc"><table id="tSect" style="margin-top:6px"></table>
@@ -256,7 +256,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v75';
+var PAGE_VER = 'MT v76';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -305,8 +305,7 @@ function couleurDelta(dv) {   // -10..+10 km/h -> rouge..gris..vert
 var valeursOn = true;
 function valeursBascule() { valeursOn = document.getElementById('valOn').checked; try { localStorage.setItem('mt_val', valeursOn ? '1' : '0'); } catch (e) {} rendre(); }
 // [v11] l'interrupteur des partielles : les montrer (tableau + bornes sur la carte) ou non
-var partiellesOn = true;
-function partiellesBascule() { partiellesOn = document.getElementById('partOn').checked; try { localStorage.setItem('mt_part', partiellesOn ? '1' : '0'); } catch (e) {} rendre(); }
+var partiellesOn = true;   // [v76] toujours vrai : le mode smart est le seul interrupteur
 // [v8] les details techniques (MAC, firmware) sont masques par defaut ; le bouton en bas de page les montre
 var details = false;
 // [v25] LE THEME. `auto` suit le reglage de la tablette (media prefers-color-scheme) ; `clair` et
@@ -1454,11 +1453,11 @@ function dessiner(v, lap) {
   }
   g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.arc(X(pts[0].dx, pts[0].dy), Y(pts[0].dx, pts[0].dy), 5, 0, Math.PI * 2); g.fill(); g.stroke();
   // [v10] l'axe du circuit reconnu (fin, blanc) et les bornes des partielles (traits magenta)
-  if (circVue && circVue.axe && (partiellesOn || smartOn)) {
+  if (circVue && circVue.axe) {   // [v76] l'axe et les bornes, dans les deux modes
     g.save(); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1.5; g.setLineDash([6, 6]); g.beginPath();
     circVue.axe.forEach(function (p, i) { var x = X(p.dx, p.dy), y = Y(p.dx, p.dy); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); }); g.closePath(); g.stroke(); g.restore();
   }
-  if (circVue && circVue.bornes && (partiellesOn || smartOn)) {
+  if (circVue && circVue.bornes) {
     var LET = circVue.lettre || 'P', DEMI = 16;   // [v68] 16 m de chaque cote de l'axe : la piste et sa marge
     var ligneBorne = function (dx, dy, px, py, nom) {
       var x1 = X(dx - px * DEMI, dy - py * DEMI), y1 = Y(dx - px * DEMI, dy - py * DEMI);
@@ -1787,10 +1786,10 @@ function circuitRendre(v, lap) {
   // [v75] CE BLOC RESTE EN TETE. Il etait en fin de fonction, apres deux sorties : un tour sans
   // circuit reconnu gardait donc l'habillage du mode smart, et la case « Partielles » restait
   // cachee en sortant du smart. On ne pouvait plus la recocher.
-  document.getElementById('partBloc').style.display = (partiellesOn || smartOn) ? '' : 'none';
-  document.getElementById('tSect').style.display = (partiellesOn && !smartOn) ? '' : 'none';         // [v72]
+  document.getElementById('partBloc').style.display = '';
+  document.getElementById('tSect').style.display = smartOn ? 'none' : '';                            // [v76]
   document.getElementById('circNote').style.display = smartOn ? 'none' : '';                          // [v72]
-  document.getElementById('partOn').parentElement.style.display = smartOn ? 'none' : '';              // [v72]
+  document.getElementById('partTitre').style.display = smartOn ? 'none' : '';                         // [v76]
   { var ref0 = compReference(v, lap), ci0 = document.getElementById('compInfo');
     if (!ref0) ci0.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
     else ci0.innerHTML = 'vs <b>#' + lapNumAff(ref0) + '</b> (' + duree(ref0.dureeMs) + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref0.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref0.dureeMs) + '</b>' : ''); }
@@ -2004,7 +2003,8 @@ try {
     ? 'vibration : supportée par le navigateur — touche Essayer pour la sentir'
     : 'vibration : non supportée par ce navigateur (iOS, ou tablette sans moteur)';
 }
-try { partiellesOn = localStorage.getItem('mt_part') !== '0'; valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode; document.getElementById('partOn').checked = partiellesOn;
+try { valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode;
+try { localStorage.removeItem('mt_part'); } catch (e) {}   // [v76] l'ancien reglage ne doit plus cacher le tableau
 circuitsCharger();
 rendre();
 setInterval(function () { rendre(); memoireEtat(); }, 10000);   // « vu il y a … », le point de portee, la memoire
