@@ -21,6 +21,14 @@
   .fige .tabs { margin-bottom:6px; }
   .fige .tabs:empty { display:none; }
   @media (max-height:520px) { .fige header { display:none; } }   /* tres peu de hauteur : le titre cede la place */
+  /* [v26] en largeur, le bandeau tient sur UNE ligne : titre, connexion, onglets. Empile, il mangeait
+     188 px de haut en paysage -- la moitie de l'ecran d'une tablette couchee. */
+  @media (min-width:900px) {
+    .fige { display:flex; align-items:center; gap:0 12px; flex-wrap:wrap; }
+    .fige header { padding:8px 0 8px 16px; }
+    .fige .card { flex:1 1 320px; margin:6px 0; }
+    .fige .tabs { margin:6px 16px 6px 0; }
+  }
   header h1 { font-size:1.15em; margin:0; letter-spacing:.04em; }
   header .ver { color:var(--muted); font-size:.85em; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; margin:0 16px 12px; padding:12px 14px; }
@@ -42,6 +50,12 @@
   td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
   tr.sel td { background:rgba(10,102,194,.12); }
   tr.clic { cursor:pointer; }
+  .deux > .card { margin-left:0; margin-right:0; }
+  .deux { margin:0 16px; }
+  @media (min-width:900px) {
+    .deux { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr); gap:12px; align-items:start; }
+    .deux .listeTours { max-height:calc(100vh - 150px); overflow:auto; }
+  }
   .jour { font-weight:600; margin:14px 0 4px; padding-bottom:4px; border-bottom:2px solid var(--line); }
   details.session { margin:6px 0; border:1px solid var(--line); border-radius:8px; padding:4px 8px; }
   details.session summary { color:inherit; font-weight:600; padding:4px 0; }
@@ -90,6 +104,7 @@
     </div>
   </div>
 
+  <div class="deux">   <!-- [v26] en largeur : la carte a gauche, les tours a droite -->
   <div class="card" id="tourCard" style="display:none">
     <div class="grille">
       <div><div class="small">Tour</div><div class="grand" id="tNum"></div><div class="small" id="tSess"></div></div>
@@ -125,7 +140,8 @@
 
   <div class="card">
     <div class="small" style="letter-spacing:.08em;margin-bottom:6px">TOURS</div>
-    <div id="toursBloc"></div>
+    <div id="toursBloc" class="listeTours"></div>
+  </div>
   </div>
 </div>
 
@@ -155,7 +171,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v25';
+var PAGE_VER = 'MT v26';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
