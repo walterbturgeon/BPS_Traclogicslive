@@ -230,7 +230,7 @@
   </div>
 
   <div class="card" id="valeursCard" style="display:none">
-    <div class="row"><label class="small"><input type="checkbox" id="valOn" checked onchange="valeursBascule()"> Valeurs du tour (p1 à p8)</label></div>
+    <div class="row"><label class="small"><input type="checkbox" id="valOn" checked onchange="valeursBascule()"> Télémétrie du tour</label></div>
     <table id="tVals" style="margin-top:4px"></table>
   </div>
   </div>
@@ -248,7 +248,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v60';
+var PAGE_VER = 'MT v61';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
