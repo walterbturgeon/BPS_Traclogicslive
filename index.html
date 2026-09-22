@@ -213,7 +213,7 @@
     <div class="row" style="margin-top:8px"><label class="small">Comparer à <select id="compSel" onchange="compChoisir()"><option value="meilleur">meilleur tour de la session</option><option value="jour">meilleur tour de la journée</option><option value="precedent">tour précédent</option><option value="aucun">rien (vitesse)</option></select></label> <span class="small" id="compInfo"></span></div>
     <div id="circBloc" style="margin-top:12px;display:none">
       <div class="row" style="justify-content:space-between">
-        <span class="small" id="partTitre">Partielles</span>
+        <span id="partTitre"><label class="small"><input type="checkbox" id="partOn" checked onchange="partiellesBascule()"> Partielles</label></span>
         <div style="margin-left:auto;text-align:right"><b id="circNom"></b> <span class="small" id="circInfo"></span></div>
       </div>
       <div id="partBloc"><table id="tSect" style="margin-top:6px"></table>
@@ -257,7 +257,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v77';
+var PAGE_VER = 'MT v78';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -306,7 +306,12 @@ function couleurDelta(dv) {   // -10..+10 km/h -> rouge..gris..vert
 var valeursOn = true;
 function valeursBascule() { valeursOn = document.getElementById('valOn').checked; try { localStorage.setItem('mt_val', valeursOn ? '1' : '0'); } catch (e) {} rendre(); }
 // [v11] l'interrupteur des partielles : les montrer (tableau + bornes sur la carte) ou non
-var partiellesOn = true;   // [v76] toujours vrai : le mode smart est le seul interrupteur
+var partiellesOn = true;   // [v78] l'interrupteur du TABLEAU, en mode normal seulement
+function partiellesBascule() {
+  partiellesOn = document.getElementById('partOn').checked;
+  try { localStorage.setItem('mt_part', partiellesOn ? '1' : '0'); } catch (e) {}
+  rendre();
+}
 // [v8] les details techniques (MAC, firmware) sont masques par defaut ; le bouton en bas de page les montre
 var details = false;
 // [v25] LE THEME. `auto` suit le reglage de la tablette (media prefers-color-scheme) ; `clair` et
@@ -1803,7 +1808,7 @@ function circuitRendre(v, lap) {
   // circuit reconnu gardait donc l'habillage du mode smart, et la case « Partielles » restait
   // cachee en sortant du smart. On ne pouvait plus la recocher.
   document.getElementById('partBloc').style.display = '';
-  document.getElementById('tSect').style.display = smartOn ? 'none' : '';                            // [v76]
+  document.getElementById('tSect').style.display = (!smartOn && partiellesOn) ? '' : 'none';          // [v78]
   document.getElementById('circNote').style.display = smartOn ? 'none' : '';                          // [v72]
   document.getElementById('partTitre').style.display = smartOn ? 'none' : '';                         // [v76]
   { var ref0 = compReference(v, lap), ci0 = document.getElementById('compInfo');
@@ -2020,7 +2025,8 @@ try {
     : 'vibration : non supportée par ce navigateur (iOS, ou tablette sans moteur)';
 }
 try { valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode;
-try { localStorage.removeItem('mt_part'); } catch (e) {}   // [v76] l'ancien reglage ne doit plus cacher le tableau
+try { partiellesOn = localStorage.getItem('mt_part') !== '0'; } catch (e) {}
+document.getElementById('partOn').checked = partiellesOn;   // [v78]
 circuitsCharger();
 rendre();
 setInterval(function () { rendre(); memoireEtat(); }, 10000);   // « vu il y a … », le point de portee, la memoire
