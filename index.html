@@ -56,6 +56,8 @@
     .deux { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr); gap:12px; align-items:start; }
     .deux .listeTours { max-height:calc(100vh - 150px); overflow:auto; }
   }
+  .pastille { width:16px; height:16px; padding:0; border-radius:50%; border:2px solid var(--muted); background:transparent; cursor:pointer; vertical-align:middle; margin-right:8px; }
+  .pastille.on { border-color:transparent; }
   .jour { font-weight:600; margin:14px 0 4px; padding-bottom:4px; border-bottom:2px solid var(--line); }
   details.session { margin:6px 0; border:1px solid var(--line); border-radius:8px; padding:4px 8px; }
   details.session summary { color:inherit; font-weight:600; padding:4px 0; }
@@ -170,7 +172,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v30';
+var PAGE_VER = 'MT v31';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -452,6 +454,13 @@ function positionA(pts, intervalMs, tMs) {
   var a = pts[i], b = pts[i + 1], u = f - i; return { dx: a.dx + u * (b.dx - a.dx), dy: a.dy + u * (b.dy - a.dy) };
 }
 var CAN_COULEURS = ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#00c7be', '#007aff', '#af52de', '#ff2d55'];
+// [v31] ce que la carte montre : un MAX par canal, au choix. Garde par appareil.
+var canMontre = [true, true, true, true, true, true, true, true];
+function canBascule(k) {
+  canMontre[k] = !canMontre[k];
+  try { localStorage.setItem('mt_canvu', canMontre.map(function (x) { return x ? '1' : '0'; }).join('')); } catch (e) {}
+  rendre();
+}
 
 // ---- memoire locale : la page rechargee garde ses tours ----
 // [v22] LA VRAIE MEMOIRE. localStorage plafonne a ~5 Mo (un tour avec trace et 8 canaux = 10-15 ko : une
@@ -659,7 +668,7 @@ function rendre0() {
     if (!it && !rs) continue;
     var nom = (it && it.nom) || (c && c.nom) || ('canal ' + (it ? it.idx : c ? c.idx : k)), unite = (it && it.unite) || (c && c.unite) || '';
     var mn = it ? it.min : rs.min, mx = it ? it.max : rs.max, moy = it ? it.moy : rs.moy, n = it ? it.n : rs.n, dec = Math.abs(mx) >= 100 ? 0 : 1;
-    hv += '<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + CAN_COULEURS[k] + ';margin-right:6px;vertical-align:middle"></span>' + nom + '</td><td class="num">' + mn.toFixed(dec) + '</td><td class="num"><b>' + moy.toFixed(dec) + '</b></td><td class="num">' + mx.toFixed(dec) + '</td><td class="num small">' + n + (it ? '' : ' <span title="echantillons a 1 Hz">(1 Hz)</span>') + '</td><td class="small">' + unite + '</td></tr>';
+    hv += '<tr><td><button class="pastille' + (canMontre[k] ? ' on' : '') + '" onclick="canBascule(' + k + ')" title="' + (canMontre[k] ? 'Cacher' : 'Montrer') + ' le maximum de ce canal sur la carte" style="background:' + (canMontre[k] ? CAN_COULEURS[k] : 'transparent') + '"></button>' + nom + '</td><td class="num">' + mn.toFixed(dec) + '</td><td class="num"><b>' + moy.toFixed(dec) + '</b></td><td class="num">' + mx.toFixed(dec) + '</td><td class="num small">' + n + (it ? '' : ' <span title="echantillons a 1 Hz">(1 Hz)</span>') + '</td><td class="small">' + unite + '</td></tr>';
     nbLignes++;
   }
   if (nbLignes) tv.innerHTML = '<tr><th>Valeur</th><th class="num">Min</th><th class="num">Moy</th><th class="num">Max</th><th class="num">n</th><th></th></tr>' + hv;
@@ -823,6 +832,7 @@ function dessiner(v, lap) {
   if (valeursOn && lap.can) {
     var echM = canEchantillons(lap), trM = v.traces[lap.num], etiq = [];
     for (var kc = 0; kc < 8; kc++) {
+      if (!canMontre[kc]) continue;   // [v31] ce canal est cache
       var rsM = canResume(lap, echM, kc); if (!rsM || rsM.sMax < 0) continue;
       var pM = positionA(pts, trM && trM.intervalMs, rsM.sMax * 1000); if (!pM) continue;
       var cM = lap.cat && lap.cat.ch[kc], nomM = (cM && cM.nom) || ('p' + (kc + 1)), decM = Math.abs(rsM.max) >= 100 ? 0 : 1;
@@ -1149,6 +1159,7 @@ try { satVoulu = localStorage.getItem('mt_sat') === '1'; document.getElementById
 document.querySelector('input[name=orient][value=' + carte.mode + ']').checked = true;
 try { details = localStorage.getItem('mt_details') === '1'; } catch (e) {}
 document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails';
+try { var vu = localStorage.getItem('mt_canvu'); if (vu && vu.length === 8) canMontre = vu.split('').map(function (c) { return c === '1'; }); } catch (e) {}
 try { partiellesOn = localStorage.getItem('mt_part') !== '0'; valeursOn = localStorage.getItem('mt_val') !== '0'; compMode = localStorage.getItem('mt_comp') || 'meilleur'; } catch (e) {} document.getElementById('valOn').checked = valeursOn; document.getElementById('compSel').value = compMode; document.getElementById('partOn').checked = partiellesOn;
 circuitsCharger();
 rendre();
