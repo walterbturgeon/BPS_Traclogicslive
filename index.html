@@ -90,12 +90,36 @@
   <div class="row">
     <button class="btn" id="btnConn" onclick="connecter()" title="Se connecter au collecteur RELAY_MT">Connect</button>
     <span id="etat" class="small"></span>
-    <button class="btn sec icone" id="btnTheme" onclick="themeSuivant()" aria-label="Thème" style="margin-left:auto">◐</button>
+    <button class="btn sec icone" onclick="reglagesBascule()" aria-label="Réglages" title="Réglages : thème, mémoire, exports, journal" style="margin-left:auto">⚙</button>
   </div>
   <div class="small" id="collInfo" style="margin-top:6px"></div>
 </div>
 
 <div class="tabs" id="tabs"></div>
+</div>
+
+<div id="reglages" class="card" style="display:none">
+  <div class="row" style="justify-content:space-between;margin-bottom:10px">
+    <b>Réglages</b>
+    <button class="btn sec" onclick="reglagesBascule()">Fermer</button>
+  </div>
+  <div class="row" style="margin-bottom:10px"><span class="small">Thème</span>
+    <button class="btn sec icone" id="btnTheme" onclick="themeSuivant()" aria-label="Thème">◐</button>
+    <span class="small" id="themeNom"></span></div>
+<div class="card" style="margin:0 0 10px">
+  <div class="row"><button class="btn sec" id="btnDetails" onclick="detailsBascule()">Détails</button><span class="small">Numéros de série (MAC) et versions des boîtes.</span></div>
+  <div class="row" style="margin-top:8px"><button class="btn sec" onclick="sauvegarder()">Sauvegarder (fichier)</button><button class="btn sec" onclick="document.getElementById('fichierRestaure').click()">Restaurer</button><input type="file" id="fichierRestaure" accept=".json,application/json" style="display:none" onchange="restaurer(this.files[0]); this.value=''"></div>
+  <div class="small" id="memEtat" style="margin-top:6px"></div>
+</div>
+
+<div class="card" style="margin:0 0 10px">
+  <details>
+    <summary>Journal de diagnostic</summary>
+    <div class="row" style="margin:8px 0"><button class="btn sec" onclick="toursCsv()">Exporter les tours (CSV)</button><button class="btn sec" onclick="traceCsv()">Exporter la trace du tour (CSV)</button></div>
+    <div class="row" style="margin:8px 0"><button class="btn sec" onclick="jrnPartager()">Télécharger le journal</button><button class="btn sec" onclick="jrnEffacer()">Effacer</button></div>
+    <div class="jrn" id="jrn"></div>
+  </details>
+</div>
 </div>
 
 <div id="vide" class="card small">Aucune voiture encore. Connecte le collecteur (RELAY_MT) : les voitures apparaissent à leur premier battement ou à leur premier tour.</div>
@@ -152,20 +176,6 @@
   </div>
 </div>
 
-<div class="card">
-  <div class="row"><button class="btn sec" id="btnDetails" onclick="detailsBascule()">Détails</button><span class="small">Numéros de série (MAC) et versions des boîtes.</span></div>
-  <div class="row" style="margin-top:8px"><button class="btn sec" onclick="sauvegarder()">Sauvegarder (fichier)</button><button class="btn sec" onclick="document.getElementById('fichierRestaure').click()">Restaurer</button><input type="file" id="fichierRestaure" accept=".json,application/json" style="display:none" onchange="restaurer(this.files[0]); this.value=''"></div>
-  <div class="small" id="memEtat" style="margin-top:6px"></div>
-</div>
-
-<div class="card">
-  <details>
-    <summary>Journal de diagnostic</summary>
-    <div class="row" style="margin:8px 0"><button class="btn sec" onclick="toursCsv()">Exporter les tours (CSV)</button><button class="btn sec" onclick="traceCsv()">Exporter la trace du tour (CSV)</button></div>
-    <div class="row" style="margin:8px 0"><button class="btn sec" onclick="jrnPartager()">Télécharger le journal</button><button class="btn sec" onclick="jrnEffacer()">Effacer</button></div>
-    <div class="jrn" id="jrn"></div>
-  </details>
-</div>
 
 <script>
 // =====================================================================
@@ -178,7 +188,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v39';
+var PAGE_VER = 'MT v40';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -230,9 +240,20 @@ function themePoser() {
     b.textContent = theme === 'auto' ? '\u25d0' : theme === 'clair' ? '\u2600' : '\u263d';   // moitie-moitie, soleil, lune
     b.title = theme === 'auto' ? 'Thème : automatique (suit la tablette)' : theme === 'clair' ? 'Thème : clair' : 'Thème : sombre';
   }
+  var n = document.getElementById('themeNom'); if (n) n.textContent = theme === 'auto' ? 'automatique (suit la tablette)' : theme;
   var sombre = theme === 'sombre' || (theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   var m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', sombre ? '#14171c' : '#f7f7f7');
   if (vueMac && vueTour != null) rendre();
+}
+function reglagesBascule() {
+  var d = document.getElementById('reglages'), ouvert = d.style.display === 'none';
+  d.style.display = ouvert ? '' : 'none';
+  if (ouvert) {
+    memoireEtat();
+    // le bandeau fige couvrirait le haut du panneau : on s'arrete juste dessous
+    var fh = document.querySelector('.fige').getBoundingClientRect().height;
+    window.scrollTo(0, Math.max(0, d.getBoundingClientRect().top + window.scrollY - fh - 8));
+  }
 }
 function themeSuivant() {
   theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
