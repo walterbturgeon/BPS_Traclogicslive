@@ -248,7 +248,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v68';
+var PAGE_VER = 'MT v69';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -259,6 +259,12 @@ var PAGE_VER = 'MT v68';
 var compMode = 'meilleur';   // 'aucun' | 'meilleur' | 'precedent'
 var compRef = null;          // le tour de reference du rendu courant, ou null
 function compChoisir() { compMode = document.getElementById('compSel').value; try { localStorage.setItem('mt_comp', compMode); } catch (e) {} rendre(); }
+function refMot(lap, ref) {   // [v69] le mot juste pour la reference
+  if (compMode === 'precedent') return 'précédent';
+  var ou = compMode === 'jour' ? 'la journée' : 'la session';
+  var mieux = lap.dureeMs != null && ref.dureeMs != null && lap.dureeMs < ref.dureeMs;
+  return mieux ? 'le meilleur des autres tours de ' + ou : 'meilleur de ' + ou;
+}
 function compReference(v, lap) {
   if (compMode === 'aucun') return null;
   var laps = (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap)).filter(function (l) { return l.dureeMs != null && traceEntiere(v.traces[l.num]).length >= 10; });   // [v21] dans la session
@@ -1816,7 +1822,7 @@ function circuitRendre(v, lap) {
   }
   var ci = document.getElementById('compInfo');
   if (!ref) ci.textContent = compMode === 'aucun' ? '' : (compMode === 'precedent' ? 'pas de tour précédent avec trace' : 'pas d\u2019autre tour avec trace à comparer');
-  else ci.innerHTML = 'vs <b>#' + lapNumAff(ref) + '</b> (' + duree(ref.dureeMs) + ', ' + (compMode === 'meilleur' ? 'meilleur de la session' : compMode === 'jour' ? 'meilleur de la journée' : 'précédent') + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref.dureeMs) + '</b>' : '')
+  else ci.innerHTML = 'vs <b>#' + lapNumAff(ref) + '</b> (' + duree(ref.dureeMs) + ', ' + refMot(lap, ref) + ') : ' + (lap.dureeMs != null ? '<b style="color:' + (lap.dureeMs - ref.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(lap.dureeMs - ref.dureeMs) + '</b>' : '')
       + (refSect ? ' · gagne ' + (gagne.length ? gagne.join(' ') : '\u2014') + ', perd ' + (perd.length ? perd.join(' ') : '\u2014') : '');
   document.getElementById('partBloc').style.display = partiellesOn ? '' : 'none';
   document.getElementById('circNote').textContent = 'Bornes à ' + Math.round(res.L / secteursN) + ' m depuis la ligne du tour, dans le sens de roulage (' + (res.sensPos ? m.c.sens : (m.c.sens === 'horaire' ? 'antihoraire' : 'horaire')) + '). Précision : celle de la trace (un point / ' + tr.intervalMs + ' ms).';
