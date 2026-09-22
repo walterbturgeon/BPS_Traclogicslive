@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'draglog-mt-';
-const CACHE = PREFIX + 'v81';   // v81 : sous la carte, la bande de verdict au lieu de la legende
+const CACHE = PREFIX + 'v82';   // v82 : la legende des couleurs part de sous la carte
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg',
                 './circuits_index.csv', './circuits_offsets.csv', '../circuits_index.csv', '../circuits_offsets.csv'];
 
