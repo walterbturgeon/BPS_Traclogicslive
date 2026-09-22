@@ -208,7 +208,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v44';
+var PAGE_VER = 'MT v45';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -861,11 +861,12 @@ function rendre0() {
     if (sn.jour !== jourCourant) { jourCourant = sn.jour; hb += '<div class="jour">' + jourTexte(sn.debutMs) + '</div>'; }
     var ouverte = sessionsRepliees[sn.cle] != null ? !sessionsRepliees[sn.cle] : (sn.cle === derniere || sn.cle === vueCle);
     hb += '<details class="session" data-cle="' + sn.cle + '"' + (ouverte ? ' open' : '') + '><summary>Session ' + sn.numJour + ' <span class="small">· ' + heureTexte(sn.debutMs) + (sn.finMs > sn.debutMs ? ' – ' + heureTexte(sn.finMs) : '') + ' · ' + sn.n + ' tour' + (sn.n > 1 ? 's' : '') + (sn.best ? ' · meilleur ' + duree(sn.best.dureeMs) : '') + (sn.motif && MOTIFS[sn.motif] ? ' · ' + MOTIFS[sn.motif] : '') + '</span></summary>';
-    hb += '<table><thead><tr><th>#</th><th class="num">Temps</th><th class="num">Écart</th><th>Chrono</th><th class="num">Heure</th></tr></thead><tbody>';
+    hb += '<table><thead><tr><th>#</th><th class="num">Temps</th><th class="num">Écart</th><th class="num">Heure</th></tr></thead><tbody>';
     sn.laps.slice().reverse().forEach(function (l, j) {
       var prec = sn.laps[sn.laps.length - 2 - j] || null;
-      hb += '<tr class="clic' + (l.num === vueTour ? ' sel' : '') + '" data-num="' + l.num + '"><td>#' + lapNumAff(l) + (sn.best && l === sn.best ? ' ★' : '') + '</td><td class="num">' + duree(l.dureeMs) + '</td><td class="num">'
-        + (prec && prec.dureeMs != null && l.dureeMs != null ? ecartTexte(l.dureeMs - prec.dureeMs) : '—') + '</td><td>' + source(l.source) + (smartOn && horsAnalyse(v, l) ? ' <span class="small" style="opacity:.7">· hors analyse</span>' : '') + '</td><td class="num small">'
+      hb += '<tr class="clic' + (l.num === vueTour ? ' sel' : '') + '" data-num="' + l.num + '"><td>#' + lapNumAff(l) + (sn.best && l === sn.best ? ' ★' : '')
+        + (smartOn && horsAnalyse(v, l) ? ' <span class="small" style="opacity:.65">hors analyse</span>' : '') + '</td><td class="num">' + duree(l.dureeMs) + '</td><td class="num">'
+        + (prec && prec.dureeMs != null && l.dureeMs != null ? ecartTexte(l.dureeMs - prec.dureeMs) : '—') + '</td><td class="num small">'
         + (l.finUtc ? new Date(l.finUtc * 1000).toTimeString().slice(0, 8) : l.recuMs ? new Date(l.recuMs).toTimeString().slice(0, 8) + ' (reçu)' : '') + '</td></tr>';
     });
     hb += '</tbody></table></details>';
