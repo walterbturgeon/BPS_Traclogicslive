@@ -30,6 +30,30 @@
   #voileReglages { position:fixed; inset:0; z-index:39; background:rgba(0,0,0,.35); display:none; }
   #voileReglages.ouvert { display:block; }
   #reglages .tete { position:sticky; top:-12px; background:var(--bg); padding:4px 0 10px; margin:-4px 0 0; }
+  /* [MT2] la barre du bas : connexion, smart, voitures, pilotes, reglages */
+  #barbas { position:fixed; left:0; right:0; bottom:0; z-index:38; display:flex;
+            background:var(--card); border-top:1px solid var(--line); padding:6px 2px calc(6px + env(safe-area-inset-bottom)); }
+  #barbas button { flex:1; background:none; border:0; color:var(--muted); font:inherit; font-size:10px; font-weight:700;
+                   letter-spacing:.03em; padding:6px 0 4px; cursor:pointer; display:flex; flex-direction:column;
+                   align-items:center; gap:3px; border-radius:10px; }
+  #barbas button .ic { font-size:17px; line-height:1; }
+  #barbas button.on { color:var(--ok); }
+  #barbas button.smart { background:var(--accent); color:#fff; }   /* [MT2] smart allume : la boite est bleue */
+  body { padding-bottom:72px; }
+  .panneau { position:fixed; top:0; right:0; bottom:0; width:min(560px,100%); z-index:41; overflow-y:auto;
+             background:var(--bg); border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.28);
+             transform:translateX(100%); transition:transform .22s ease-out; padding:12px 16px 90px; }
+  .panneau.ouvert { transform:translateX(0); }
+  .panneau .tete { position:sticky; top:-12px; background:var(--bg); padding:4px 0 10px; margin:-4px 0 0;
+                   display:flex; justify-content:space-between; align-items:center; }
+  .ch { margin-bottom:8px; }
+  .ch label { display:block; font-size:11px; color:var(--muted); margin-bottom:3px; }
+  .ch input, .ch select, .ch textarea { width:100%; background:var(--bg); color:var(--fg); border:1px solid var(--line);
+                                        border-radius:8px; padding:8px; font:inherit; }
+  .ch textarea { min-height:70px; resize:vertical; }
+  .g2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .g4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; }
+  .fiche-resume { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
   .fige .card { margin-bottom:8px; }
   .fige .tabs { margin-bottom:6px; }
   .fige .tabs:empty { display:none; }
@@ -88,6 +112,8 @@
   /* [v83] LA BOITE DE VERDICT NE VIT QUE SOUS LA CARTE. Celle du haut reste dans la page : elle
      porte le texte et la couleur que la boite du bas recopie. Elle ne s'affiche simplement plus. */
   #smartBande { display:none !important; }
+  /* [MT2] la connexion, le smart et les reglages vivent dans la barre du bas */
+  #btnConn, #smartVu, #btnReglages { display:none !important; }
   .pastille { width:16px; height:16px; padding:0; border-radius:50%; border:2px solid var(--muted); background:transparent; cursor:pointer; vertical-align:middle; margin-right:8px; }
   .pastille.on { border-color:transparent; }
   .jour { font-weight:600; margin:14px 0 4px; padding-bottom:4px; border-bottom:2px solid var(--line); }
@@ -103,6 +129,104 @@
   .badge.ok { background:var(--ok); color:#fff; }
   .badge.warn { background:var(--warn); color:#fff; }
   details summary { cursor:pointer; color:var(--muted); }
+  /* ================= [MT2 v0.2] HABILLAGE RACELOG ================= */
+  :root, :root[data-theme="dark"], :root[data-theme="light"] {
+    --bg:#0A0C10; --card:#14171D; --tab:#1C2029; --toile:#0A0C10;
+    --ink:#F2F5FA; --muted:#9AA3B2; --line:#232833;
+    --accent:#FF5A1F;      /* orange de course : l'action */
+    --ok:#2ED573;          /* vert : mieux */
+    --warn:#FF4757;        /* rouge : pire, ou limite atteinte */
+    --ambre:#FFB020;       /* ambre : un record */
+    --bleu:#3D8BFF;        /* bleu : meteo, densite */
+    --violet:#A55EEA;      /* violet : reglages, ingenieur */
+  }
+  body { background:var(--bg); color:var(--ink);
+         font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
+  /* le titre, comme RACELOG : majuscules, lettres espacees, au centre */
+  header { padding:14px 16px 10px; }
+  header h1, header .titre, header b { letter-spacing:.14em; text-transform:uppercase; font-weight:800; }
+  .ver { color:var(--muted); font-size:.72em; letter-spacing:.06em; text-transform:uppercase; }
+  .fige { background:var(--bg); box-shadow:0 6px 18px rgba(0,0,0,.45); }
+  /* les cartes : coins ronds larges, fond releve, trait discret */
+  .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:14px 16px; }
+  /* les titres de section : petits, gris, majuscules */
+  h2, .titre2, #circBloc > .row b, .jour {
+    font-size:.72em; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:800; }
+  /* les chiffres : chasse fixe, colonnes alignees */
+  .num, .grand, table td, table th, .mono, #tTemps, #tNum, .bande {
+    font-variant-numeric:tabular-nums; }
+  .grand, #tTemps { font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-weight:800; letter-spacing:-.01em; }
+  table td.num, table th.num { font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; }
+  /* les boutons : sombre releve ; l'action en orange plein */
+  .btn { background:var(--tab); color:var(--ink); border:1px solid var(--line); border-radius:12px;
+         font-weight:700; letter-spacing:.02em; }
+  .btn.sec { background:transparent; color:var(--muted); }
+  .btn.action { background:var(--accent); border-color:var(--accent); color:#120800;
+                text-transform:uppercase; letter-spacing:.06em; }
+  /* les onglets des voitures : pastilles, la voiture vue en orange plein */
+  .tab { background:var(--tab); border:1px solid var(--line); border-radius:999px; padding:9px 16px; }
+  .tab.on { background:var(--accent); border-color:var(--accent); color:#120800; }
+  .tab.on .sub, .tab.on .nom { color:#120800; }
+  /* les pastilles de session et les tableaux */
+  details.session > summary { letter-spacing:.02em; }
+  table th { color:var(--muted); font-size:.72em; letter-spacing:.1em; text-transform:uppercase; font-weight:700; }
+  tr.clic.sel { background:rgba(255,90,31,.12); }
+  /* la meteo et la densite en bleu, le record en ambre */
+  #tMeteo { color:var(--bleu); }
+  .bande { border-radius:999px; font-weight:700; letter-spacing:.02em; }
+  /* la barre du bas, dessinee comme celle de RACELOG */
+  #barbas { background:var(--card); border-top:1px solid var(--line); padding:0 2px calc(4px + env(safe-area-inset-bottom)); }
+  #barbas button { position:relative; color:var(--muted); font-size:8px; letter-spacing:.02em;
+                   text-transform:uppercase; padding:10px 1px 6px; gap:4px; border-radius:0;
+                   min-width:0; white-space:nowrap; }
+  #barbas button svg { width:22px; height:22px; stroke:currentColor; fill:none;
+                       stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  #barbas button.actif { color:var(--accent); }
+  #barbas button.actif::before { content:''; position:absolute; top:0; left:26%; right:26%; height:3px;
+                                 border-radius:0 0 3px 3px; background:var(--accent); }
+  #barbas button.on { color:var(--ok); }
+  #barbas button.on::before { content:''; position:absolute; top:0; left:26%; right:26%; height:3px;
+                              border-radius:0 0 3px 3px; background:var(--ok); }
+  #barbas button.smart { background:none; color:var(--bleu); }
+  #barbas button.smart::before { content:''; position:absolute; top:0; left:26%; right:26%; height:3px;
+                                 border-radius:0 0 3px 3px; background:var(--bleu); }
+  /* les panneaux : meme peau que les cartes */
+  .panneau { background:var(--bg); border-left:1px solid var(--line); }
+  .panneau .card { border-radius:18px; }
+  .ch input, .ch select, .ch textarea { background:var(--tab); border-radius:12px; border-color:var(--line); }
+  #reglages { background:var(--bg); }
+  /* [MT2 v2.1] un temps ne se coupe pas en deux lignes : la colonne garde son chiffre entier */
+  table td.num, table td.v { white-space:nowrap; }   /* les chiffres seulement : le texte doit pouvoir passer a la ligne */
+  .panneau table { table-layout:auto; width:100%; }
+  .panneau table td { overflow-wrap:anywhere; }
+  /* [MT2 v2.2] une pastille ne se coupe jamais en syllabes : MECANIQUE tient sur une ligne */
+  .bande { white-space:nowrap; }
+  /* [MT2 v2.5] les explications ne sortent qu avec le bouton Details */
+  body:not(.avecAide) .aide { display:none !important; }
+  /* [MT2 v0.3] les commandes posees sur la carte */
+  #carteBoite { position:relative; }
+  #carteCmd { position:absolute; top:10px; right:10px; display:flex; flex-direction:column; gap:6px; z-index:5; }
+  #carteCmd button { width:38px; height:38px; padding:0; border-radius:10px; cursor:pointer;
+                     background:rgba(28,32,41,.82); border:1px solid rgba(255,255,255,.10);
+                     color:#C8CFDA; display:flex; align-items:center; justify-content:center;
+                     backdrop-filter:blur(4px); box-shadow:0 2px 8px rgba(0,0,0,.35); }
+  #carteCmd button svg { width:20px; height:20px; stroke:currentColor; fill:none;
+                         stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  #carteCmd button.on { color:#fff; background:rgba(255,90,31,.92); border-color:rgba(255,90,31,.92); }
+  #carteCmd button.vert { color:#fff; background:rgba(46,213,115,.9); border-color:rgba(46,213,115,.9); }
+  #carteCmd button.bleu { color:#fff; background:rgba(61,139,255,.92); border-color:rgba(61,139,255,.92); }
+  /* la vieille ligne de cases reste dans le code, mais plus a l'ecran */
+  #carteLigneCmd { display:none !important; }
+  /* [MT2 v0.2] les grands chiffres en tuiles, comme BEST ET / BEST MPH / BEST 60 FT */
+  .grille { grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:8px; }
+  /* la premiere tuile porte la session et les pastilles de la fiche : elle est deux fois plus large */
+  .grille > div:first-child { grid-column:span 2; }
+  @media (max-width:560px) { .grille > div:first-child { grid-column:1 / -1; } }
+  .grille > div { background:var(--tab); border:1px solid var(--line); border-radius:14px; padding:10px 12px; }
+  .grille > div > .small:first-child { font-size:.68em; letter-spacing:.1em; text-transform:uppercase;
+                                       color:var(--muted); font-weight:700; }
+  .grille .grand { font-size:1.5em; margin-top:2px; }
+  .ver { font-size:.62em; text-transform:none; letter-spacing:.02em; opacity:.75; }
 </style>
 </head>
 <body>
@@ -136,6 +260,51 @@
 </div>
 
 <div id="voileReglages" onclick="reglagesBascule()"></div>
+
+<!-- [MT2] la barre du bas -->
+<div id="barbas">
+  <button id="bbConn" onclick="connecter()" aria-label="Connexion">
+    <svg viewBox="0 0 24 24"><path d="M9 2v6M15 2v6"/><path d="M6 8h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8Z"/><path d="M12 17v5"/></svg>CONNEXION</button>
+  <button id="bbSmart" onclick="smartBascule()" aria-label="Mode smart">
+    <svg viewBox="0 0 24 24"><path d="M9.5 5.5A4 4 0 0 1 17 7c0 1.6-.6 2.6-1.3 3.5-.5.7-.7 1.4-.7 2.2V21"/><path d="M9.5 5.5c-.7 1.3-1.6 2.6-2.4 3.8-.4.6-.3 1.1.4 1.3l1.3.3c.3.1.5.3.5.7l.1 1.9c0 .8.6 1.4 1.4 1.4h2.2"/><path d="M11 11.5h3.5"/></svg>SMART</button>
+  <button id="bbVoit" onclick="panneauOuvrir('panVoitures')" aria-label="Voitures">
+    <svg viewBox="0 0 24 24"><path d="M4 16v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-2M16 16v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-2"/><path d="M3 16v-3.5L5 7a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 7l2 5.5V16H3Z"/><path d="M6 12.5h2M16 12.5h2"/></svg>VOITURES</button>
+  <button id="bbPil" onclick="panneauOuvrir('panPilotes')" aria-label="Pilotes">
+    <svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 1 7 7v2h-6.5l-1.5 3H8a5 5 0 0 1-5-5 7 7 0 0 1 9-6.8"/><path d="M5 19.5a7 7 0 0 1 14 0"/></svg>PILOTES</button>
+  <button id="bbCafe" onclick="cafeOuvrir()" aria-label="Coffee break">
+    <svg viewBox="0 0 24 24"><path d="M4 9h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z"/><path d="M17 10h1.6a2.4 2.4 0 0 1 0 4.8H17"/><path d="M8 3v2.5M12 3v2.5"/></svg>CAFÉ</button>
+  <button id="bbReg" onclick="reglagesBascule()" aria-label="Réglages">
+    <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h8M16 17h4"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="14" cy="17" r="2"/></svg>RÉGLAGES</button>
+</div>
+
+<!-- [MT2] le panneau des voitures et de leurs fiches de seance -->
+<div class="panneau" id="panVoitures" role="dialog" aria-label="Voitures">
+  <div class="tete"><b>Voitures et fiches de séance</b>
+    <button class="btn sec" onclick="panneauFermer('panVoitures')">Fermer</button></div>
+  <div id="panVoituresCorps"></div>
+</div>
+
+<!-- [MT2] le panneau des pilotes -->
+<div class="panneau" id="panPilotes" role="dialog" aria-label="Pilotes">
+  <div class="tete"><b>Pilotes</b>
+    <button class="btn sec" onclick="panneauFermer('panPilotes')">Fermer</button></div>
+  <div id="panPilotesCorps"></div>
+</div>
+
+<!-- [MT2 v0.8] le coffee break : deux seances face a face, et ce que les changements ont donne -->
+<div class="panneau" id="panCafe" role="dialog" aria-label="Coffee break">
+  <div class="tete"><b>☕ Coffee break</b>
+    <button class="btn sec" onclick="panneauFermer('panCafe')">Fermer</button></div>
+  <div id="cafeCorps"></div>
+</div>
+
+<!-- [MT2] la fiche d'une seance : pneus, pressions, suspension, aero, notes -->
+<div class="panneau" id="panFiche" role="dialog" aria-label="Fiche de séance">
+  <div class="tete"><b id="ficheTitre">Fiche de séance</b>
+    <span><button class="btn" onclick="ficheEnregistrer()">Enregistrer</button>
+    <button class="btn sec" onclick="panneauFermer('panFiche')">Fermer</button></span></div>
+  <div id="ficheCorps"></div>
+</div>
 <div id="reglages" role="dialog" aria-label="Réglages">
   <div class="row tete" style="justify-content:space-between">
     <b>Réglages</b>
@@ -221,9 +390,9 @@
       </div>
       <div id="partBloc"><table id="tSect" style="margin-top:6px"></table>
       <div class="small" id="smartPhrase" style="margin-top:6px;display:none"></div>
-      <div class="small" id="circNote"></div></div>
+      <div class="small aide" id="circNote"></div></div>
     </div>
-    <div class="row" style="margin:10px 0 6px">
+    <div class="row" style="margin:10px 0 6px" id="carteLigneCmd">
       <label class="small"><input type="checkbox" id="satOn" onchange="satBascule()"> Fond satellite</label>
       <label class="small"><input type="radio" name="orient" value="max" onchange="orientChoisir('max')"> Maximiser le tracé</label>
       <label class="small"><input type="radio" name="orient" value="nord" onchange="orientChoisir('nord')"> Nord en haut</label>
@@ -231,10 +400,22 @@
       <button class="btn sec" style="padding:4px 10px" onclick="carteRecadrer()">Recadrer</button>
       <span class="small" id="satEtat"></span>
     </div>
-    <canvas id="carte" height="10" style="touch-action:none"></canvas>
+    <div id="carteBoite">
+      <canvas id="carte" height="10" style="touch-action:none"></canvas>
+      <div id="carteCmd">
+        <button id="cmdFond" onclick="cmdFond()" title="Fond : plan ou satellite" aria-label="Fond de carte">
+          <svg viewBox="0 0 24 24"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg></button>
+        <button id="cmdOrient" onclick="cmdOrient()" title="Orientation : tracé au plus grand, ou nord en haut" aria-label="Orientation">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15 9-4.5 1.5L9 15l4.5-1.5L15 9Z"/></svg></button>
+        <button id="cmdVerrou" onclick="cmdVerrou()" title="Vue verrouillée ou libre" aria-label="Verrou de la vue">
+          <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></button>
+        <button id="cmdRecadre" onclick="carteRecadrer()" title="Recadrer" aria-label="Recadrer">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg></button>
+      </div>
+    </div>
     <div id="carteBande" style="display:none;margin-top:6px"><span class="bande" id="smartBandeBas" style="margin-left:0"></span></div>
     <div class="small" id="carteLeg"></div>
-    <div class="small" id="carteAide">Vue libre : un doigt déplace, deux doigts zooment et tournent, double toucher recadre. Vue verrouillée : un doigt sur le tracé montre la vitesse à ce point.</div>
+    <div class="small aide" id="carteAide">Vue libre : un doigt déplace, deux doigts zooment et tournent, double toucher recadre. Vue verrouillée : un doigt sur le tracé montre la vitesse à ce point.</div>
   </div>
 
   <div class="card">
@@ -261,7 +442,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v84';
+var PAGE_VER = 'TRACLOGICS v2.5';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -322,6 +503,9 @@ function vitesseA(ptsRef, dRef, d) {
   var lo = 0, hi = n - 1; while (hi - lo > 1) { var m = (lo + hi) >> 1; if (dRef[m] <= d) lo = m; else hi = m; }
   var f = (d - dRef[lo]) / Math.max(dRef[hi] - dRef[lo], 1e-6); return ptsRef[lo].kmh + f * (ptsRef[hi].kmh - ptsRef[lo].kmh);
 }
+function grisHorsSection() {   // [MT2 v0.8] sombre sur le plan clair, clair sur le satellite
+  return (satVoulu && satCouche === 'plan') ? 'rgba(38,44,56,0.78)' : 'rgba(150,150,150,0.55)';
+}
 function couleurDelta(dv) {   // -10..+10 km/h -> rouge..gris..vert
   var u = Math.max(-1, Math.min(1, dv / 10)), a = Math.abs(u);
   if (a < 0.08) return 'rgb(190,190,190)';
@@ -371,7 +555,7 @@ function themeSuivant() {
   try { localStorage.setItem('mt_theme', theme); } catch (e) {}
   themePoser();
 }
-function detailsBascule() { details = !details; try { localStorage.setItem('mt_details', details ? '1' : '0'); } catch (e) {} document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails'; rendre(); }
+function detailsBascule() { details = !details; document.body.classList.toggle('avecAide', details); try { localStorage.setItem('mt_details', details ? '1' : '0'); } catch (e) {} document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails'; rendre(); }
 var RL_SVC = 'b3d5a900-1a2b-4c3d-9e0f-56789abcdef0';
 var RL_DATA = 'b3d5a901-1a2b-4c3d-9e0f-56789abcdef0';
 var RL_CMD = 'b3d5a902-1a2b-4c3d-9e0f-56789abcdef0';
@@ -383,9 +567,559 @@ var voitures = {};        // mac -> {mac, idx, nom, num, fw, vuMs, laps:{num->la
 var ordreVoitures = [];   // les MAC dans l'ordre d'apparition
 var idxVersMac = {};      // indice du collecteur -> MAC (appris par l'identite 0x09)
 var vueMac = null;        // l'onglet ouvert
+// =====================================================================
+// [MT2 v0.1] LE CARNET DE SEANCE. Le chrono ne dit pas tout : la meme voiture
+// sur la meme piste ne repond pas pareil avec 2 psi de moins ou un aileron
+// change. Chaque seance porte donc sa fiche : pilote, pneus, pressions,
+// suspension, aerodynamique, notes. Rien de tout cela ne vient du boitier :
+// c'est le carnet de l'equipe, garde dans la tablette, a cote des tours.
+// La cle d'une fiche = MAC de la voiture + jour + numero de session.
+// =====================================================================
+var fiches = {}, pilotes = [];
+try { fiches = JSON.parse(localStorage.getItem('mt2_fiches') || '{}'); } catch (e) { fiches = {}; }
+try { pilotes = JSON.parse(localStorage.getItem('mt2_pilotes') || '[]'); } catch (e) { pilotes = []; }
+function fichesSauver() { try { localStorage.setItem('mt2_fiches', JSON.stringify(fiches)); } catch (e) {} }
+function pilotesSauver() { try { localStorage.setItem('mt2_pilotes', JSON.stringify(pilotes)); } catch (e) {} }
+function ficheCle(mac, sn) { return mac + '|' + sn.jour + '|' + sn.cle; }
+function ficheDe(mac, sn) { return fiches[ficheCle(mac, sn)] || null; }
+// [MT2 v0.4] la fiche QUI COMPTE pour une seance : la sienne, sinon celle d'avant
+function ficheEffective(mac, sn) {
+  var propre = fiches[ficheCle(mac, sn)];
+  if (propre) return { f: propre, herite: false, source: '' };
+  var v = voitures[mac];
+  if (v) {
+    var avant = sessionsDe(v).filter(function (x) { return x.debutMs < sn.debutMs; });
+    for (var i = avant.length - 1; i >= 0; i--) {
+      var ff = fiches[ficheCle(mac, avant[i])];
+      if (ff) return { f: ff, herite: true,
+        source: 'session ' + avant[i].numJour + ' du ' + new Date(avant[i].debutMs).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long' }) };
+    }
+  }
+  return { f: null, herite: false, source: '' };
+}
+var ficheEnCours = null;   // { mac, cle, nom }
+
+// =====================================================================
+// [MT2 v0.8] LE COFFEE BREAK. Entre deux seances, on veut savoir ce que les
+// changements ont donne. La page met deux seances face a face : le chrono, les
+// secteurs, le carnet de reglages et la meteo. Puis elle LIT le tableau, avec
+// deux etiquettes seulement :
+//   OBSERVE   : un fait mesure, tire des tours.
+//   PISTE     : une explication possible, jamais une certitude.
+// ⚠ ON N'INVENTE PAS DE VERDICT. Sans carnet rempli, la page dit qu'elle ne sait
+// pas ce qui a change sur la voiture. Une meteo differente est dite AVANT tout le
+// reste : elle explique des ecarts que rien d'autre n'explique.
+// =====================================================================
+var cafeMac = null, cafeA = null, cafeB = null;
+function cafeOuvrir() { cafeRendre(); panneauOuvrir('panCafe'); }
+function cafeChoisir(quoi, val) { if (quoi === 'mac') { cafeMac = val; cafeA = cafeB = null; } else if (quoi === 'a') cafeA = val; else cafeB = val; cafeRendre(); }
+function cafeStats(v, sn) {
+  var out = { n: 0, best: null, moy3: null, ecartType: null, sect: null, bornes: null, degres: null, pluie: null, bestLap: null };
+  var t = sn.laps.filter(function (l) { return l.dureeMs != null && !horsAnalyse(v, l); });
+  if (!t.length) t = sn.laps.filter(function (l) { return l.dureeMs != null; });
+  out.n = t.length; if (!t.length) return out;
+  var tri = t.slice().sort(function (a, b) { return a.dureeMs - b.dureeMs; });
+  out.best = tri[0].dureeMs; out.bestLap = tri[0];
+  var k = Math.min(3, tri.length), som = 0;
+  for (var i = 0; i < k; i++) som += tri[i].dureeMs;
+  out.moy3 = som / k;
+  var moy = t.reduce(function (a2, l) { return a2 + l.dureeMs; }, 0) / t.length, va = 0;
+  t.forEach(function (l) { va += Math.pow(l.dureeMs - moy, 2); });
+  out.ecartType = Math.sqrt(va / t.length);
+  var md = [], mp = [];
+  t.forEach(function (l) { if (l.meteo) { md.push(l.meteo.degres); mp.push(l.meteo.pluie); } });
+  if (md.length) { out.degres = md.reduce(function (a2, x) { return a2 + x; }, 0) / md.length;
+                   out.pluie = mp.reduce(function (a2, x) { return a2 + x; }, 0) / mp.length; }
+  var pts = traceEntiere(v.traces[out.bestLap.num]), m = pts.length ? circuitPourTour(out.bestLap, pts) : null;
+  if (m) {
+    var tr = v.traces[out.bestLap.num];
+    var r = secteursCalculer(out.bestLap, pts, m, secteursN, tr.intervalMs, null);
+    if (r) {
+      out.sect = r.sect; out.bornes = r.bornes; out.circuit = m.c.nom;
+      out.stats = smartStats(out.bestLap, pts, r, tr, m);   // [MT2 v1.2] freinage, point lent, chemin, gaz
+    }
+  }
+  return out;
+}
+function cafeDiffFiche(fa, fb) {
+  var noms = { pilote: 'Pilote', pneuModele: 'Modèle de pneu', pneuTaille: 'Grandeur de pneu',
+    psiAvG: 'Pression av. G', psiAvD: 'Pression av. D', psiArG: 'Pression ar. G', psiArD: 'Pression ar. D',
+    ressortAv: 'Ressort avant', ressortAr: 'Ressort arrière', amortAv: 'Amortisseur avant', amortAr: 'Amortisseur arrière',
+    barreAv: 'Barre av.', barreAr: 'Barre ar.', hauteurAv: 'Hauteur av.', hauteurAr: 'Hauteur ar.',
+    carrossage: 'Carrossage', pincement: 'Pincement', aileron: 'Aileron', lame: 'Lame avant',
+    gurney: 'Gurney', divers: 'Autre aéro' };
+  var out = [];
+  Object.keys(noms).forEach(function (k) {
+    var a = (fa && fa[k]) || '', b = (fb && fb[k]) || '';
+    if (a !== b) out.push({ k: k, nom: noms[k], a: a || '—', b: b || '—' });
+  });
+  return out;
+}
+function cafeRendre() {
+  var mac = cafeMac || vueMac, v = voitures[mac];
+  var h = '';
+  if (!v) { document.getElementById('cafeCorps').innerHTML = '<div class="card small">Aucune voiture.</div>'; return; }
+  var ss = sessionsDe(v);
+  h += '<div class="card"><div class="ch"><label>Voiture</label><select onchange="cafeChoisir(\'mac\', this.value)">'
+     + ordreVoitures.map(function (m2) { return '<option value="' + m2 + '"' + (m2 === mac ? ' selected' : '') + '>' + voitures[m2].nom + '</option>'; }).join('')
+     + '</select></div>';
+  if (ss.length < 2) {
+    h += '<div class="small">Il faut deux séances pour comparer. Cette voiture en a ' + ss.length + '.</div></div>';
+    document.getElementById('cafeCorps').innerHTML = h; return;
+  }
+  var cleB = cafeB || ss[ss.length - 1].cle + '|' + ss[ss.length - 1].jour;
+  var cleA = cafeA || ss[ss.length - 2].cle + '|' + ss[ss.length - 2].jour;
+  function trouve(cle) { var r = null; ss.forEach(function (x) { if (x.cle + '|' + x.jour === cle) r = x; }); return r; }
+  var A = trouve(cleA) || ss[ss.length - 2], B = trouve(cleB) || ss[ss.length - 1];
+  function opts(sel) { return ss.map(function (x) {
+    var c = x.cle + '|' + x.jour;
+    return '<option value="' + c + '"' + (c === sel ? ' selected' : '') + '>Session ' + x.numJour + ' · ' + heureTexte(x.debutMs) + ' · ' + jourTexte(x.debutMs).replace(/ \d{4}$/, '') + '</option>';
+  }).join(''); }
+  h += '<div class="g2"><div class="ch"><label>Séance A (avant)</label><select onchange="cafeChoisir(\'a\', this.value)">' + opts(A.cle + '|' + A.jour) + '</select></div>'
+     + '<div class="ch"><label>Séance B (après)</label><select onchange="cafeChoisir(\'b\', this.value)">' + opts(B.cle + '|' + B.jour) + '</select></div></div></div>';
+  var sa = cafeStats(v, A), sb = cafeStats(v, B);
+  var fa = ficheEffective(mac, A).f, fb = ficheEffective(mac, B).f;
+  // ---- le chrono ----
+  function lig2(k, a, b, d, inv) {
+    var delta = (a == null || b == null) ? null : b - a;
+    var cl = delta == null ? '' : ((inv ? delta > 0 : delta < 0) ? 'style="color:var(--ok)"' : 'style="color:var(--warn)"');
+    return '<tr><td>' + k + '</td><td class="num">' + (a == null ? '—' : d(a)) + '</td><td class="num">' + (b == null ? '—' : d(b)) + '</td>'
+         + '<td class="num" ' + cl + '>' + (delta == null ? '—' : (delta > 0 ? '+' : '') + d(delta)) + '</td></tr>';
+  }
+  var ds = function (ms) { return (ms / 1000).toFixed(2).replace('.', ',') + ' s'; };
+  h += '<div class="card"><b>Chrono</b><table style="margin-top:8px"><tr><th>Mesure</th><th>A</th><th>B</th><th>Écart</th></tr>'
+     + '<tr><td>Tours comptés</td><td class="num">' + sa.n + '</td><td class="num">' + sb.n + '</td><td class="num">—</td></tr>'
+     + lig2('Meilleur tour', sa.best, sb.best, ds)
+     + lig2('Moyenne des 3 meilleurs', sa.moy3, sb.moy3, ds)
+     + lig2('Régularité (écart type)', sa.ecartType, sb.ecartType, ds)
+     + '</table></div>';
+  // ---- les secteurs du meilleur tour ----
+  var pire = null, pireI = -1, total = (sa.best != null && sb.best != null) ? sb.best - sa.best : null;
+  if (sa.sect && sb.sect && sa.sect.length === sb.sect.length) {
+    var hs = '<div class="card"><b>Secteurs du meilleur tour</b>'
+           + '<div class="small aide" style="opacity:.7;margin:4px 0 8px">Secteurs de longueur égale depuis la ligne : comparables d\u2019une séance à l\u2019autre.</div>'
+           + '<table><tr><th>Secteur</th><th>A</th><th>B</th><th>Écart</th></tr>';
+    sa.sect.forEach(function (x, i) {
+      var y = sb.sect[i], d2 = (x != null && y != null) ? y - x : null;
+      if (d2 != null && (pire == null || Math.abs(d2) > Math.abs(pire))) { pire = d2; pireI = i; }
+      hs += lig2('P' + (i + 1), x, y, ds);
+    });
+    h += hs + '</table></div>';
+  }
+  // ---- le carnet ----
+  var diff = cafeDiffFiche(fa, fb);
+  h += '<div class="card"><b>Carnet de réglages</b>';
+  if (!fa && !fb) h += '<div class="small" style="margin-top:6px">Aucune fiche remplie pour ces deux séances. La page ne peut pas dire ce qui a changé sur la voiture.</div>';
+  else if (!diff.length) h += '<div class="small" style="margin-top:6px">Rien n\u2019a changé au carnet entre les deux séances.</div>';
+  else h += '<table style="margin-top:8px"><tr><th>Réglage</th><th>A</th><th>B</th></tr>'
+     + diff.map(function (d3) { return '<tr class="chg"><td>' + d3.nom + '</td><td class="num">' + d3.a + '</td><td class="num">' + d3.b + '</td></tr>'; }).join('')
+     + '</table>';
+  h += '</div>';
+  // ---- la meteo ----
+  var dT = (sa.degres != null && sb.degres != null) ? sb.degres - sa.degres : null;
+  var dP = (sa.pluie != null && sb.pluie != null) ? sb.pluie - sa.pluie : null;
+  h += '<div class="card"><b>Météo</b>';
+  if (sa.degres == null || sb.degres == null) h += '<div class="small" style="margin-top:6px">Pas de relevé pour une des deux séances.</div>';
+  else h += '<table style="margin-top:8px"><tr><th>Mesure</th><th>A</th><th>B</th><th>Écart</th></tr>'
+     + '<tr><td>Température</td><td class="num">' + sa.degres.toFixed(1).replace('.', ',') + ' °C</td><td class="num">' + sb.degres.toFixed(1).replace('.', ',') + ' °C</td>'
+     + '<td class="num">' + (dT > 0 ? '+' : '') + dT.toFixed(1).replace('.', ',') + '</td></tr>'
+     + '<tr><td>Pluie</td><td class="num">' + sa.pluie.toFixed(1).replace('.', ',') + ' mm/h</td><td class="num">' + sb.pluie.toFixed(1).replace('.', ',') + ' mm/h</td>'
+     + '<td class="num">' + (dP > 0 ? '+' : '') + dP.toFixed(1).replace('.', ',') + '</td></tr></table>';
+  h += '</div>';
+  // ---- les causes possibles, secteur par secteur ----
+  h += cafeCauses(sa, sb);
+  // ---- ce que le pilote a fait, secteur par secteur ----
+  h += cafePilote(sa, sb);
+  // ---- le materiel : toutes les seances, regroupees par ce qu'elles avaient sous elles ----
+  h += cafeMateriel(v, mac);
+  // ---- la lecture ----
+  h += '<div class="card"><b>Lecture</b>' + cafeLecture(sa, sb, diff, fa, fb, dT, dP, pire, pireI, total) + '</div>';
+  document.getElementById('cafeCorps').innerHTML = h;
+}
+// [MT2 v1.2] ce que la trace dit des mains du pilote, secteur par secteur
+function cafePilote(sa, sb) {
+  if (!sa.stats || !sb.stats || !sa.sect || !sb.sect || sa.sect.length !== sb.sect.length) return '';
+  var lignes = [];
+  sa.sect.forEach(function (x, i) {
+    var y = sb.sect[i]; if (x == null || y == null) return;
+    var a = sa.stats[i], b = sb.stats[i]; if (!a || !b) return;
+    var faits = [];
+    if (a.freinage != null && b.freinage != null && Math.abs(b.freinage - a.freinage) >= 5)
+      faits.push('freinage <b>' + Math.round(Math.abs(b.freinage - a.freinage)) + ' m plus ' + (b.freinage > a.freinage ? 'tard' : 'tôt') + '</b>');
+    if (a.kmhMin != null && b.kmhMin != null && Math.abs(b.kmhMin - a.kmhMin) >= 2)
+      faits.push('point lent <b>' + (b.kmhMin > a.kmhMin ? '+' : '') + Math.round(b.kmhMin - a.kmhMin) + ' km/h</b>');
+    if (a.chemin && b.chemin && Math.abs(b.chemin - a.chemin) >= 5)
+      faits.push('ligne <b>' + Math.round(Math.abs(b.chemin - a.chemin)) + ' m plus ' + (b.chemin > a.chemin ? 'longue' : 'courte') + '</b>');
+    if (a.gazPt != null && b.gazPt != null && Math.abs(b.gazPt - a.gazPt) >= 5)
+      faits.push('gaz <b>' + Math.round(Math.abs(b.gazPt - a.gazPt)) + ' m plus ' + (b.gazPt > a.gazPt ? 'tard' : 'tôt') + '</b>');
+    if (faits.length) lignes.push({ i: i, d: y - x, txt: faits.join(' · ') });
+  });
+  if (!lignes.length) return '<div class="card"><b>Les mains du pilote</b>'
+    + '<div class="small" style="margin-top:6px">Aucune différence marquante de freinage, de ligne ou de reprise des gaz entre les deux meilleurs tours.</div></div>';
+  lignes.sort(function (x, y) { return Math.abs(y.d) - Math.abs(x.d); });
+  var ds = function (ms) { return (ms / 1000).toFixed(2).replace('.', ',') + ' s'; };
+  return '<div class="card"><b>Les mains du pilote</b>'
+    + '<div class="small aide" style="opacity:.7;margin:4px 0 8px">Mesuré sur la trace des deux meilleurs tours : B contre A. '
+    + 'Ces quatre mesures viennent de la trace GPS : elles ne demandent aucun capteur du moteur.</div>'
+    + '<table><tr><th>Secteur</th><th>Écart</th><th>Ce qui a changé</th></tr>'
+    + lignes.slice(0, 4).map(function (l) {
+        return '<tr><td>P' + (l.i + 1) + '</td><td class="num" style="color:' + (l.d < 0 ? 'var(--ok)' : 'var(--warn)') + '">'
+             + (l.d > 0 ? '+' : '') + ds(l.d) + '</td><td style="text-align:left">' + l.txt + '</td></tr>';
+      }).join('') + '</table></div>';
+}
+// [MT2 v1.2] toutes les seances, regroupees par ce qu'elles avaient sous elles
+function cafeGroupes(v, mac, champs) {
+  var g = {}, ordre = [];
+  sessionsDe(v).forEach(function (sn) {
+    var f = ficheEffective(mac, sn).f; if (!f) return;
+    var vals = champs.map(function (k) { return f[k] || ''; });
+    if (!vals.join('')) return;   // rien de rempli pour cette famille
+    var cle = vals.map(function (x) { return x || '—'; }).join(' · ');
+    var st = cafeStats(v, sn); if (st.best == null) return;
+    if (!g[cle]) { g[cle] = { cle: cle, n: 0, tours: 0, best: null, degres: [] }; ordre.push(cle); }
+    var e = g[cle];
+    e.n++; e.tours += st.n;
+    if (e.best == null || st.best < e.best) e.best = st.best;
+    if (st.degres != null) e.degres.push(st.degres);
+  });
+  return ordre.map(function (k) {
+    var e = g[k];
+    e.temp = e.degres.length ? e.degres.reduce(function (a, x) { return a + x; }, 0) / e.degres.length : null;
+    return e;
+  });
+}
+function cafeTableGroupes(titre, groupes) {
+  if (groupes.length < 2) return '';
+  var tri = groupes.slice().sort(function (a, b) { return a.best - b.best; });
+  var ref = tri[0].best;
+  var temps = groupes.map(function (x) { return x.temp; }).filter(function (x) { return x != null; });
+  var ecartT = temps.length >= 2 ? Math.max.apply(null, temps) - Math.min.apply(null, temps) : 0;
+  var h = '<div class="card"><b>' + titre + '</b>'
+        + '<table style="margin-top:8px"><tr><th>' + titre + '</th><th>Séances</th><th>Meilleur</th><th>Écart</th></tr>'
+        + tri.map(function (e) {
+            var d = e.best - ref;
+            return '<tr><td style="text-align:left">' + e.cle + '</td><td class="num">' + e.n + '</td>'
+                 + '<td class="num">' + duree(e.best) + '</td>'
+                 + '<td class="num" style="color:' + (d > 0 ? 'var(--warn)' : 'var(--ok)') + '">' + (d ? '+' + (d / 1000).toFixed(2).replace('.', ',') + ' s' : '—') + '</td></tr>';
+          }).join('') + '</table>';
+  if (ecartT >= 4) h += '<div class="small" style="margin-top:6px;color:var(--accent)">\u26a0 Ces groupes n\u2019ont pas roulé par la même météo : '
+       + Math.round(ecartT) + ' °C séparent le plus chaud du plus froid. Le matériel n\u2019explique pas tout.</div>';
+  return h + '</div>';
+}
+function cafeMateriel(v, mac) {
+  var h = '';
+  h += cafeTableGroupes('Pneus', cafeGroupes(v, mac, ['pneuModele', 'pneuTaille']));
+  h += cafeTableGroupes('Pressions', cafeGroupes(v, mac, ['psiAvG', 'psiAvD', 'psiArG', 'psiArD']));
+  h += cafeTableGroupes('Suspension', cafeGroupes(v, mac, ['ressortAv', 'ressortAr', 'amortAv', 'amortAr', 'barreAv', 'barreAr']));
+  h += cafeTableGroupes('Aérodynamique', cafeGroupes(v, mac, ['aileron', 'lame', 'gurney']));
+  h += cafeTableGroupes('Pilote', cafeGroupes(v, mac, ['pilote']));
+  if (!h) return '<div class="card"><b>Le matériel</b>'
+    + '<div class="small" style="margin-top:6px">Il faut au moins deux séances avec des fiches différentes pour comparer un pneu, une pression ou un réglage. Remplis les fiches, et ce bloc se remplit tout seul.</div></div>';
+  return '<div class="small" style="margin:14px 2px 6px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:800">Le matériel a-t-il compté ?</div>' + h;
+}
+// [MT2 v1.4] ce qui explique un secteur : la demande contre la reponse
+function cafeCause(b, a, dt) {   // b = secteur de la seance B, a = celui de A
+  if (!a || !b) return null;
+  var n = Math.min(a.ng || 0, b.ng || 0);
+  var sGaz = Math.max(8, 50 / Math.sqrt(Math.max(n, 1)));      // le bruit d'un papillon tout ou rien a 1 Hz
+  var dGaz = (a.gaz != null && b.gaz != null) ? b.gaz - a.gaz : null;
+  var dMap = (a.map != null && b.map != null) ? b.map - a.map : null;
+  var sMap = 15;    // [MT2 v1.6] 15 kPa : plus bas, c'est du bruit de mesure
+  var dRpm = (a.rpm != null && b.rpm != null) ? b.rpm - a.rpm : null;
+  var dV = (a.vMoy != null && b.vMoy != null) ? b.vMoy - a.vMoy : null;
+  if (dGaz == null) return { type: 'inconnu', txt: 'sans voie de papillon, la page ne peut pas séparer la demande de la réponse' };
+  if (dGaz < -sGaz)
+    return { type: 'demande', txt: 'demande plus faible : ' + Math.round(-dGaz) + ' points de papillon en moins'
+           + (dMap != null ? ', MAP ' + Math.round(dMap) + ' kPa' : '') };
+  // la demande est egale ou plus forte : on regarde ce que le moteur REND, mais seulement
+  // a forte demande et a regime comparable. Sinon un tour plus lent accuse le turbo a tort.
+  var nP = Math.min(a.nP || 0, b.nP || 0);
+  var dMapP = (a.mapPlein != null && b.mapPlein != null) ? b.mapPlein - a.mapPlein : null;
+  var dRpmP = (a.rpmPlein != null && b.rpmPlein != null) ? b.rpmPlein - a.rpmPlein : null;
+  // [MT2 v1.6] seuil donne par le pilote le 23 sept. : 15 kPa parle, 20 kPa ne laisse pas de doute
+  var sMapP = 15, netP = 20;
+  var suralim = !!(a.suralim || b.suralim);
+  var comparable = nP >= (suralim ? 5 : 3) && (dRpmP == null || Math.abs(dRpmP) <= 500);   // [MT2 v1.7]
+  if (comparable && dMapP != null && dMapP <= -sMapP)
+    return { type: 'mecanique', pct: confiancePct(dMapP, sMapP, netP),
+             txt: 'à pleine charge tenue et à régime égal, le MAP tombe de ' + Math.round(-dMapP) + ' kPa — admission ou turbo' };
+  if (comparable && dMapP != null && Math.abs(dMapP) < sMapP && dV != null && dV < -2 && (dRpm == null || dRpm < 0))
+    return { type: 'mecanique', pct: confiancePct(dV, 2, 8),
+             txt: 'même demande, même MAP à pleine charge, mais ' + Math.round(-dV) + ' km/h de moins en moyenne — le moteur ne rend plus' };
+  var faits = [], pctMax = 0;
+  function garde(v2, nom) { var q = confiancePct(v2, SEUILS[nom][0], SEUILS[nom][1]); if (q > pctMax) pctMax = q; return q > 0; }
+  if (a.freinage != null && b.freinage != null && garde(b.freinage - a.freinage, 'freinage'))
+    faits.push('freinage ' + Math.round(Math.abs(b.freinage - a.freinage)) + ' m plus ' + (b.freinage > a.freinage ? 'tard' : 'tôt'));
+  if (a.kmhMin != null && b.kmhMin != null && garde(b.kmhMin - a.kmhMin, 'point'))
+    faits.push('point lent ' + (b.kmhMin > a.kmhMin ? '+' : '') + Math.round(b.kmhMin - a.kmhMin) + ' km/h');
+  if (a.chemin && b.chemin && garde(b.chemin - a.chemin, 'ligne'))
+    faits.push('ligne ' + Math.round(Math.abs(b.chemin - a.chemin)) + ' m plus ' + (b.chemin > a.chemin ? 'longue' : 'courte'));
+  if (a.gazPt != null && b.gazPt != null && garde(b.gazPt - a.gazPt, 'gaz'))
+    faits.push('gaz ' + Math.round(Math.abs(b.gazPt - a.gazPt)) + ' m plus ' + (b.gazPt > a.gazPt ? 'tard' : 'tôt'));
+  if (faits.length) return { type: 'pilotage', pct: pctMax, txt: faits.join(' · ') };
+  return { type: 'inconnu', txt: 'rien de mesurable ne sépare les deux passages' };
+}
+// [MT2 v2.4] quelles voies le tour porte-t-il vraiment ?
+function voiesDe(lap) {
+  return {
+    gaz: smartCanal(lap, RE_GAZ) >= 0,
+    map: smartCanal(lap, RE_MAP) >= 0,
+    rpm: smartCanal(lap, RE_RPM) >= 0,
+    lambda: smartCanal(lap, RE_LAMBDA) >= 0
+  };
+}
+function voiesManquantes(lap) {
+  var v2 = voiesDe(lap), out = [];
+  if (!v2.gaz) out.push('papillon');
+  if (!v2.map) out.push('MAP');
+  if (!v2.rpm) out.push('régime');
+  if (!v2.lambda) out.push('lambda');
+  return out;
+}
+function cafeCauses(sa, sb) {
+  if (!sa.stats || !sb.stats || !sa.sect || !sb.sect || sa.sect.length !== sb.sect.length)
+    return '<div class="card"><b>Causes possibles</b><div class="small" style="margin-top:6px">Il manque la trace ou les canaux d\u2019une des deux séances.</div></div>';
+  var manque = sb.bestLap ? voiesManquantes(sb.bestLap) : [];   // [MT2 v2.4]
+  var COUL = { mecanique: 'var(--warn)', pilotage: '#3D8BFF', demande: 'var(--muted)', inconnu: 'var(--muted)' };
+  var NOM = { mecanique: 'MÉCANIQUE', pilotage: 'PILOTAGE', demande: 'DEMANDE', inconnu: 'INCONNU' };
+  var somme = { mecanique: 0, pilotage: 0, demande: 0, inconnu: 0 }, lignes = [];
+  sa.sect.forEach(function (x, i) {
+    var y = sb.sect[i]; if (x == null || y == null) return;
+    var d = y - x, c = cafeCause(sb.stats[i], sa.stats[i], d);
+    if (!c) return;
+    somme[c.type] += d;
+    lignes.push({ i: i, d: d, c: c });
+  });
+  if (!lignes.length) return '';
+  lignes.sort(function (p2, q) { return Math.abs(q.d) - Math.abs(p2.d); });
+  var ds = function (ms) { return (ms > 0 ? '+' : '') + (ms / 1000).toFixed(2).replace('.', ',') + ' s'; };
+  var h = '<div class="card"><b>Causes possibles</b>'
+        + '<div class="small aide" style="opacity:.7;margin:4px 0 8px">Le papillon est une demande, pas une puissance. La réponse se lit au MAP, au régime et à la vitesse.</div>'
+        + (manque.length ? '<div class="small" style="margin:0 0 8px;color:var(--accent)">\u26a0 Voie absente du flux : <b>'
+             + manque.join(', ') + '</b>. Les verdicts qui en dépendent ne sont pas donnés.</div>' : '')
+        + '<table><tr><th>Secteur</th><th>Écart</th><th>Cause</th><th>Ce qui est mesuré</th></tr>'
+        + lignes.map(function (l) {
+            return '<tr><td>P' + (l.i + 1) + '</td><td class="num" style="color:' + (l.d < 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ds(l.d) + '</td>'
+                 + '<td><span class="bande" style="margin-left:0;background:' + fondConfiance(COUL[l.c.type], l.c.pct == null ? 100 : l.c.pct) + '">'
+                 + NOM[l.c.type] + (l.c.pct != null && l.c.pct < 100 ? ' ' + l.c.pct + ' %' : '') + '</span></td>'
+                 + '<td style="text-align:left">' + l.c.txt + '</td></tr>';
+          }).join('') + '</table>';
+  var parts = [];
+  ['mecanique', 'pilotage', 'demande', 'inconnu'].forEach(function (k) {
+    if (Math.abs(somme[k]) >= 100) parts.push('<b style="color:' + COUL[k] + '">' + NOM[k].toLowerCase() + '</b> ' + ds(somme[k]));
+  });
+  if (parts.length) h += '<div class="small" style="margin-top:10px;color:var(--ink)">Somme par cause : ' + parts.join(' · ') + '</div>';
+  // la demande de la seance, vue de haut : plus de papillon sans aller plus vite ?
+  var gA = 0, gB = 0, nA = 0, nB = 0;
+  sa.stats.forEach(function (o) { if (o.gaz != null) { gA += o.gaz; nA++; } });
+  sb.stats.forEach(function (o) { if (o.gaz != null) { gB += o.gaz; nB++; } });
+  if (nA && nB) {
+    var dG = gB / nB - gA / nA, dT = sb.best - sa.best;
+    if (dG >= 8 && dT > -300)
+      h += '<div class="small" style="margin-top:8px;color:var(--warn)">\u26a0 Tu as demandé ' + Math.round(dG)
+         + ' points de papillon de plus qu\u2019à la séance A, et le tour n\u2019est pas plus rapide. La voiture ne rend pas ce qu\u2019on lui demande.</div>';
+    else if (dG <= -8 && dT < 300)
+      h += '<div class="small" style="margin-top:8px;color:var(--ok)">Tu as demandé ' + Math.round(-dG)
+         + ' points de papillon de moins, sans perdre de temps. C\u2019est du pilotage, pas de la puissance.</div>';
+  }
+  return h + '</div>';
+}
+function cafeObs(t) { return '<div style="margin-top:10px"><span class="bande" style="margin-left:0;background:#1c8f4a">OBSERVÉ</span>'
+  + '<div class="small" style="margin-top:5px;color:var(--ink)">' + t + '</div></div>'; }
+function cafePiste(t) { return '<div style="margin-top:10px"><span class="bande" style="margin-left:0;background:#A55EEA">PISTE</span>'
+  + '<div class="small" style="margin-top:5px;color:var(--ink)">' + t + '</div></div>'; }
+function cafeLecture(sa, sb, diff, fa, fb, dT, dP, pire, pireI, total) {
+  // [MT2 v0.9] LA LECTURE NE REPETE PAS LES TABLEAUX. Les chiffres sont juste au-dessus :
+  // ecart, regularite, meteo, reglages changes. La lecture ne garde que ce que les
+  // tableaux ne disent PAS : la part de l'ecart portee par un seul secteur, et ce que
+  // chaque changement fait d'habitude a une voiture.
+  var out = '', ds = function (ms) { return (Math.abs(ms) / 1000).toFixed(2).replace('.', ','); };
+  if (sa.best == null || sb.best == null) return '<div class="small" style="margin-top:6px">Une des deux séances n’a aucun tour chronométré.</div>';
+  var meteoDiff = (dT != null && Math.abs(dT) >= 4) || (dP != null && Math.abs(dP) >= 0.3);
+  if (meteoDiff)
+    out += cafePiste('Météo différente : compare avec prudence. Une piste plus ' + (dT > 0 ? 'chaude' : 'froide')
+      + ' change l’adhérence et le moteur, sans que personne n’ait touché à la voiture.');
+  var pilote = diff.filter(function (d) { return d.k === 'pilote'; })[0];
+  if (pilote) out += cafePiste('Le pilote a changé : l’écart mélange la voiture et la main.');
+  if (pire != null && total != null && Math.abs(total) > 300) {
+    var part = Math.abs(pire / total);
+    if (part >= 0.55)
+      out += cafeObs('Le secteur <b>P' + (pireI + 1) + '</b> porte <b>' + Math.round(part * 100) + ' %</b> de l’écart : ' + ds(pire) + ' s.')
+           + cafePiste('Un seul secteur qui bouge, c’est une courbe, une ligne ou un freinage, plus qu’un réglage. Regarde ce secteur en mode smart.');
+    else
+      out += cafeObs('L’écart est réparti : le pire secteur, P' + (pireI + 1) + ', n’en porte que <b>' + Math.round(part * 100) + ' %</b>.')
+           + cafePiste('Un écart réparti vient de la voiture ou de la piste, pas d’un virage : adhérence, pneus, réglages, ou température.');
+  }
+  var pneus = diff.filter(function (d) { return /pneu/i.test(d.k); });
+  var psi = diff.filter(function (d) { return /^psi/.test(d.k); });
+  var susp = diff.filter(function (d) { return /ressort|amort|barre|hauteur|carrossage|pincement/.test(d.k); });
+  var aero = diff.filter(function (d) { return /aileron|lame|gurney|divers/.test(d.k); });
+  if (!fa && !fb)
+    out += cafePiste('Le carnet est vide : la page ne peut pas dire ce qui a changé sur la voiture. Remplis la fiche de séance et cette lecture deviendra bien plus sûre.');
+  else if (!diff.length && Math.abs(total) > 300 && !meteoDiff)
+    out += cafePiste('La voiture est la même au carnet et la météo aussi. Il reste le pilotage, la piste qui se gomme, et la température des pneus.');
+  else {
+    if (pneus.length) out += cafePiste('Pneus changés : cela touche surtout la vitesse en courbe et la tenue sur la longueur d’une séance.');
+    if (psi.length) out += cafePiste('Pressions changées : trop haute, la gomme glisse en milieu de courbe ; trop basse, la voiture devient molle à la mise en appui.');
+    if (susp.length) out += cafePiste('Suspension changée : cela se voit surtout dans les virages lents et dans les changements d’appui.');
+    if (aero.length) out += cafePiste('Aéro changée : elle se paie en ligne droite et se gagne en courbe rapide. Compare les secteurs rapides et les secteurs lents.');
+  }
+  if (!out) out = '<div class="small" style="margin-top:6px">Rien à ajouter : les tableaux disent tout.</div>';
+  out += '<div class="small aide" style="margin-top:12px;opacity:.7">OBSERVÉ = un fait tiré de tes tours. PISTE = une explication possible, pas une preuve.</div>';
+  return out;
+}
+function panneauOuvrir(id) {
+  if (id === 'panVoitures') panVoituresRendre();
+  if (id === 'panPilotes') panPilotesRendre();
+  if (id === 'panCafe') cafeRendre();
+  document.getElementById(id).classList.add('ouvert');
+  document.getElementById('voileReglages').classList.add('ouvert');
+  barreMaj();
+}
+function panneauFermer(id) {
+  document.getElementById(id).classList.remove('ouvert');
+  var reste = ['panVoitures', 'panPilotes', 'panFiche', 'panCafe'].some(function (x) { return document.getElementById(x).classList.contains('ouvert'); });
+  if (!reste && !document.getElementById('reglages').classList.contains('ouvert'))
+    document.getElementById('voileReglages').classList.remove('ouvert');
+  rendre(); barreMaj();
+}
+function barreMaj() {   // [MT2] la barre dit l'etat : vert connecte, bleu smart, orange panneau ouvert
+  {   // [MT2 v0.2] le panneau ouvert porte le trait orange, comme l'onglet actif de RACELOG
+    var paires = [['bbVoit', 'panVoitures'], ['bbPil', 'panPilotes'], ['bbCafe', 'panCafe'], ['bbReg', 'reglages']];
+    paires.forEach(function (x) {
+      var b = document.getElementById(x[0]), pan = document.getElementById(x[1]);
+      if (b && pan) b.classList.toggle('actif', pan.classList.contains('ouvert'));
+    });
+  }
+  {   // [MT2] la vieille carte du haut ne garde que les messages : vide, elle disparait
+    var e1 = document.getElementById('etat'), e2 = document.getElementById('collInfo');
+    var carte = e1 ? e1.closest('.card') : null;
+    if (carte) carte.style.display = ((e1 && e1.textContent.trim()) || (e2 && e2.textContent.trim())) ? '' : 'none';
+  }
+  var c = document.getElementById('bbConn'), sm = document.getElementById('bbSmart');
+  if (c) { c.classList.toggle('on', !!connecte); c.lastChild.nodeValue = connecte ? 'CONNECTÉ' : 'CONNEXION'; }
+  if (sm) sm.classList.toggle('smart', !!smartOn);
+}
+
+// ---- le panneau des voitures : une carte par voiture, une ligne par seance ----
+function panVoituresRendre() {
+  var h = '';
+  ordreVoitures.forEach(function (mac) {
+    var v = voitures[mac], sessions = sessionsDe(v);
+    h += '<div class="card"><div class="row" style="justify-content:space-between">'
+       + '<b>' + v.nom + '</b><span class="small">n° ' + v.num + ' · ' + (v.fw || '?') + '</span></div>'
+       + '<div class="small" style="opacity:.7">' + mac + '</div>';
+    if (!sessions.length) h += '<div class="small" style="margin-top:6px">Aucune séance reçue.</div>';
+    sessions.slice().reverse().forEach(function (sn) {
+      var eff = ficheEffective(mac, sn), f = eff.f, r = f ? ficheResume(f) : '';   // [MT2 v0.4]
+      h += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">'
+         + '<div class="row" style="justify-content:space-between">'
+         + '<span>Session ' + sn.numJour + ' <span class="small">· ' + jourTexte(sn.debutMs).replace(/^./, function (x) { return x.toUpperCase(); }) + ' · ' + sn.n + ' tour(s)</span></span>'
+         + '<button class="btn sec" onclick="ficheOuvrir(\'' + mac + '\', \'' + sn.jour + '\', \'' + sn.cle + '\')">' + (eff.herite ? 'Fiche ↩' : (f ? 'Fiche ✓' : 'Fiche')) + '</button></div>'
+         + (r ? '<div class="fiche-resume"' + (eff.herite ? ' style="opacity:.62"' : '') + '>' + r + (eff.herite ? ' <span class="small" style="opacity:.8">reprise de la ' + eff.source + '</span>' : '') + '</div>' : '') + '</div>';
+    });
+    h += '</div>';
+  });
+  if (!ordreVoitures.length) h = '<div class="card small">Aucune voiture. Touche CONNEXION pour recevoir le collecteur.</div>';
+  document.getElementById('panVoituresCorps').innerHTML = h;
+}
+function ficheResume(f) {
+  var out = [];
+  if (f.pilote) out.push('<span class="bande" style="margin-left:0;background:#3a5a8a">' + f.pilote + '</span>');
+  if (f.pneuModele || f.pneuTaille) out.push('<span class="bande" style="margin-left:0;background:#4a4a52">' + ((f.pneuModele || '') + ' ' + (f.pneuTaille || '')).trim() + '</span>');
+  var psi = [f.psiAvG, f.psiAvD, f.psiArG, f.psiArD].filter(function (x) { return x; });
+  if (psi.length) out.push('<span class="bande" style="margin-left:0;background:#4a4a52">' + psi.join(' / ') + ' psi</span>');
+  if (f.aileron) out.push('<span class="bande" style="margin-left:0;background:#5a4a7a">aileron ' + f.aileron + '</span>');
+  return out.join(' ');
+}
+
+// ---- la fiche elle-meme ----
+function ficheOuvrir(mac, jour, cle) {
+  var v = voitures[mac]; if (!v) return;
+  var sn = null; sessionsDe(v).forEach(function (x) { if (x.jour === jour && x.cle === cle) sn = x; });
+  if (!sn) return;
+  ficheEnCours = { mac: mac, cle: ficheCle(mac, sn) };
+  var eff = ficheEffective(mac, sn), f = eff.f || {};   // [MT2 v0.4] reprise de la seance d'avant
+  document.getElementById('ficheTitre').textContent = v.nom + ' · session ' + sn.numJour;
+  function ch(id, lab, val, unite) {
+    return '<div class="ch"><label>' + lab + (unite ? ' (' + unite + ')' : '') + '</label>'
+         + '<input id="fi_' + id + '" value="' + (val == null ? '' : String(val).replace(/"/g, '&quot;')) + '"></div>';
+  }
+  var opts = ['<option value="">—</option>'].concat(pilotes.map(function (p) {
+    return '<option' + (f.pilote === p ? ' selected' : '') + '>' + p + '</option>';
+  })).join('');
+  // [MT2 v0.5] une seule ligne dit la reprise : la page reste maigre
+  var h = (eff.herite ? '<div class="small" style="margin:0 2px 8px;color:var(--accent)">↩ repris de la '
+        + eff.source + '</div>' : '')
+        + '<div class="card"><div class="small" style="margin-bottom:8px">'
+        + jourTexte(sn.debutMs) + ' · ' + heureTexte(sn.debutMs) + ' · ' + sn.n + ' tour(s)'
+        + (sn.best ? ' · meilleur ' + duree(sn.best.dureeMs) : '') + '</div>'
+        + '<div class="ch"><label>Pilote</label><select id="fi_pilote">' + opts + '</select></div>'
+        + '<div class="small aide" style="opacity:.7">Ajoute un pilote dans le panneau PILOTES.</div></div>'
+        + '<div class="card"><b>Pneus</b>'
+        + '<div class="g2" style="margin-top:8px">' + ch('pneuModele', 'Modèle', f.pneuModele) + ch('pneuTaille', 'Grandeur', f.pneuTaille) + '</div>'
+        + '<div class="small">Pressions à froid</div>'
+        + '<div class="g4" style="margin-top:4px">' + ch('psiAvG', 'Av. G', f.psiAvG, 'psi') + ch('psiAvD', 'Av. D', f.psiAvD, 'psi')
+        + ch('psiArG', 'Ar. G', f.psiArG, 'psi') + ch('psiArD', 'Ar. D', f.psiArD, 'psi') + '</div></div>'
+        + '<div class="card"><b>Suspension</b><div class="g2" style="margin-top:8px">'
+        + ch('ressortAv', 'Ressort avant', f.ressortAv) + ch('ressortAr', 'Ressort arrière', f.ressortAr)
+        + ch('amortAv', 'Amortisseur avant', f.amortAv) + ch('amortAr', 'Amortisseur arrière', f.amortAr)
+        + ch('barreAv', 'Barre anti-roulis avant', f.barreAv) + ch('barreAr', 'Barre anti-roulis arrière', f.barreAr)
+        + ch('hauteurAv', 'Hauteur de caisse avant', f.hauteurAv, 'mm') + ch('hauteurAr', 'Hauteur de caisse arrière', f.hauteurAr, 'mm')
+        + ch('carrossage', 'Carrossage', f.carrossage, '°') + ch('pincement', 'Pincement', f.pincement) + '</div></div>'
+        + '<div class="card"><b>Aérodynamique</b><div class="g2" style="margin-top:8px">'
+        + ch('aileron', 'Aileron arrière', f.aileron) + ch('lame', 'Lame avant', f.lame)
+        + ch('gurney', 'Gurney', f.gurney) + ch('divers', 'Autre', f.divers) + '</div></div>'
+        + '<div class="card"><b>Notes de séance</b><div class="ch" style="margin-top:8px">'
+        + '<textarea id="fi_notes">' + (f.notes || '') + '</textarea></div>'
+        + '<div class="small aide" style="opacity:.7">Tout ce que le boîtier ne peut pas savoir : essence, lest, météo vue du stand, plaintes du pilote.</div></div>';
+  document.getElementById('ficheCorps').innerHTML = h;
+  document.getElementById('panFiche').classList.add('ouvert');
+  document.getElementById('voileReglages').classList.add('ouvert');
+}
+function ficheEnregistrer() {
+  if (!ficheEnCours) return;
+  var f = {}, champs = ['pneuModele', 'pneuTaille', 'psiAvG', 'psiAvD', 'psiArG', 'psiArD',
+    'ressortAv', 'ressortAr', 'amortAv', 'amortAr', 'barreAv', 'barreAr', 'hauteurAv', 'hauteurAr',
+    'carrossage', 'pincement', 'aileron', 'lame', 'gurney', 'divers'];
+  champs.forEach(function (k) { var e = document.getElementById('fi_' + k); if (e && e.value.trim()) f[k] = e.value.trim(); });
+  var pl = document.getElementById('fi_pilote'); if (pl && pl.value) f.pilote = pl.value;
+  var nt = document.getElementById('fi_notes'); if (nt && nt.value.trim()) f.notes = nt.value.trim();
+  if (Object.keys(f).length) fiches[ficheEnCours.cle] = f; else delete fiches[ficheEnCours.cle];
+  fichesSauver();
+  jrn('Fiche de séance enregistrée : ' + ficheEnCours.cle);
+  panneauFermer('panFiche');
+  panVoituresRendre();
+}
+
+// ---- les pilotes ----
+function panPilotesRendre() {
+  var h = '<div class="card"><div class="row">'
+        + '<input id="pilNeuf" placeholder="Nom du pilote" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit">'
+        + '<button class="btn" onclick="piloteAjouter()">Ajouter</button></div></div>';
+  h += pilotes.length ? pilotes.map(function (p, i) {
+    return '<div class="card"><div class="row" style="justify-content:space-between"><b>' + p + '</b>'
+         + '<button class="btn sec" onclick="piloteRetirer(' + i + ')">Retirer</button></div>'
+         + '<div class="small" style="opacity:.7;margin-top:4px">' + piloteSeances(p) + '</div></div>';
+  }).join('') : '<div class="card small">Aucun pilote. Ajoute-les ici, puis choisis-en un dans chaque fiche de séance.</div>';
+  document.getElementById('panPilotesCorps').innerHTML = h;
+}
+function piloteSeances(nom) {
+  var n = 0; Object.keys(fiches).forEach(function (k) { if (fiches[k].pilote === nom) n++; });
+  return n ? n + ' séance(s) à son nom' : 'aucune séance';
+}
+function piloteAjouter() {
+  var e = document.getElementById('pilNeuf'), nom = e.value.trim();
+  if (!nom || pilotes.indexOf(nom) >= 0) return;
+  pilotes.push(nom); pilotesSauver(); e.value = ''; panPilotesRendre();
+}
+function piloteRetirer(i) { pilotes.splice(i, 1); pilotesSauver(); panPilotesRendre(); }
 var vueTour = null;       // le tour affiche
 var device = null, cmdChar = null, dataChar = null, connecte = false;
 var satVoulu = false, satImg = null, satCle = '';
+var satCouche = 'sat';   // [MT2 v0.6] 'plan' ou 'sat' ; satVoulu dit s'il y a un fond
+try { satCouche = localStorage.getItem('mt_couche') === 'plan' ? 'plan' : 'sat'; } catch (e) {}
+var SAT_SERVICES = { sat: 'World_Imagery', plan: 'World_Street_Map' };
 var proj = null;
 
 // ---- journal ----
@@ -436,6 +1170,7 @@ function etat(t) { document.getElementById('etat').textContent = t; jrn(t); }
 // [v34] LE BOUTON DIT L'ETAT PAR SA COULEUR. « Connect » gris = pas de collecteur ;
 // « Connecte » vert = la tablette recoit. Un mot court laisse la place aux voitures.
 function connBouton(ok) {
+  barreMaj();   // [MT2]
   var b = document.getElementById('btnConn');
   b.textContent = ok ? 'Connecté' : 'Connect';
   b.style.background = ok ? 'var(--ok)' : '';
@@ -689,7 +1424,7 @@ function decodeCatalogue(v, b) {
 function decodeCanaux(v, b) {
   if (b.length < 10) return;
   var dv = new DataView(b.buffer, b.byteOffset), num = dv.getUint16(1, true), part = b[3], nb = b[4], n = b[5], s0 = dv.getUint16(6, true);
-  var fmt = b[9] || 0, variable = !!(fmt & 1), tronque = !!(fmt & 2);   // [v84]
+  var fmt = b[9] || 0, variable = !!(fmt & 1), tronque = !!(fmt & 2);   // [MT2 v1.9]
   var lap = v.laps[num] || { num: num, recuMs: Date.now() };
   var can = lap.can || { nb: nb, parts: {} }; can.nb = nb;
   if (tronque && !can.tronque) { can.tronque = true; jrn('Tour #' + lapNumAff(lap) + ' : canaux tronqués par le boîtier (tour trop long)'); }
@@ -719,9 +1454,9 @@ function canEchantillons(lap) {
   return out;
 }
 // la valeur reelle du canal k a la seconde s (null si absente)
-// [v84] LA DERNIERE VALEUR CONNUE TIENT. Le boitier n'envoie une voie que si elle a bouge :
-// entre deux envois, la valeur n'a pas disparu, elle n'a pas change. On remonte jusqu'a 30 s
-// en arriere pour la retrouver. Au-dela, on rend « rien » plutot que d'inventer.
+// [MT2 v1.9] LA DERNIERE VALEUR CONNUE TIENT. Le boitier n'envoie une voie que si elle a
+// bouge : entre deux envois, la valeur n'a pas disparu, elle n'a pas change. On remonte donc
+// jusqu'a 30 s en arriere pour la retrouver. Au-dela, on rend « rien » plutot que d'inventer.
 function canValeur(lap, ech, k, sec) {
   var r = ech[sec], c = lap.cat && lap.cat.ch[k];
   if (r && (r[0] & (1 << k))) return c ? r[1 + k] * c.div + c.off : r[1 + k];
@@ -759,6 +1494,7 @@ function canValeurA(lap, ech, k, tMs) {
 // ou tous deux mouilles. Un tour sous la pluie ne se compare pas a un tour au sec.
 var smartOn = false;
 var RE_GAZ = /throttle|papillon|tps/i, RE_RPM = /rpm|engine speed|regime/i;
+var RE_MAP = /\bmap\b|mgp|boost|admission|manifold|pression.*adm/i;   // [MT2 v1.4] ce que le moteur rend
 var RE_TEMP = /temp|^t_|coolant|huile|eau|iat|cact|egt|pneu|tire|tyre/i;
 // [v52] LES LIMITES DE TEMPERATURE, UNE PAR VOITURE. Elles servent dans les DEUX modes : en
 // normal, elles allument un message des qu'un tour les atteint ; en smart, elles cadrent aussi
@@ -818,6 +1554,44 @@ function tempSuite(v, lap, k, memo) {
 function mediane(t) { if (!t.length) return null; var u = t.slice().sort(function (a, b) { return a - b; }); return u[Math.floor(u.length / 2)]; }
 function secMax(lap, ech, k) { var r = canResume(lap, ech, k); return r ? r.sMax : -1; }   // [v72] la seconde du maximum
 var alertesVues = [];   // [v72] les alertes du tour affiche, pour les poser sur la carte
+var RE_LAMBDA = /lambda|afr/i;
+// [MT2 v2.0] la pointe pauvre en virage, et la mediane du tour : les deux en lambda
+function essenceTour(v, lap) {
+  var k = smartCanal(lap, RE_LAMBDA); if (k < 0) return null;
+  var tr = v.traces[lap.num], pts = traceEntiere(tr); if (pts.length < 20) return null;
+  var ech = canEchantillons(lap), inter = (tr && tr.intervalMs) || 500;
+  var vMax = 0; pts.forEach(function (p) { if (p.kmh > vMax) vMax = p.kmh; });
+  if (!vMax) return null;
+  var tous = [], virage = [];
+  for (var i = 0; i < pts.length; i++) {
+    var x = canValeurA(lap, ech, k, i * inter); if (x == null) continue;
+    if (x > 5) x = x / 14.7;            // la voie donne un AFR : on ramene en lambda
+    if (x < 0.5 || x > 1.6) continue;   // hors plage : capteur froid ou coupure
+    tous.push(x);
+    if (pts[i].kmh < 0.70 * vMax) virage.push(x);
+  }
+  if (tous.length < 20 || virage.length < 8) return null;
+  virage.sort(function (a, b) { return a - b; });
+  var pointe = virage[Math.floor(virage.length * 0.95)];   // le 95e centile : pas le seul pic
+  return { pointe: pointe, med: mediane(tous), n: virage.length };
+}
+function alerteEssence(v, lap) {
+  var ici = essenceTour(v, lap); if (!ici) return null;
+  var sn = sessionDe(v, lap); if (!sn) return null;
+  var avant = sn.laps.filter(function (l) { return l.num < lap.num && l.dureeMs != null; });
+  if (avant.length < 2) return null;                       // il faut trois tours pour voir une suite
+  var suite = [ici.pointe], ecart = ici.pointe - ici.med;
+  for (var i = avant.length - 1; i >= 0 && suite.length < 3; i--) {
+    var q = essenceTour(v, avant[i]); if (!q) return null;
+    suite.push(q.pointe);
+  }
+  if (suite.length < 3) return null;
+  var monte = suite[0] > suite[1] && suite[1] > suite[2];   // trois tours de hausse de suite
+  if (!monte || ecart < 0.06 * ici.med) return null;
+  return { n: 2, k: -1, s: -1,
+    txt: '\u26a0 mélange pauvre en virage, 3 tours de suite (\u03bb ' + ici.pointe.toFixed(2).replace('.', ',')
+       + ' contre ' + ici.med.toFixed(2).replace('.', ',') + ') \u2014 niveau d\u2019essence ?' };
+}
 function alerteTemperatures(v, lap) {
   if (!lap.cat) return [];
   var L = limites(v.mac), memo = {}, out = [], ech = canEchantillons(lap);   // [v72] situer l'alerte
@@ -843,11 +1617,12 @@ function alerteTemperatures(v, lap) {
     // [v63] EN MODE NORMAL, RIEN D'AUTRE QUE LA LIMITE. La hausse inhabituelle et l'approche
     // sont de l'analyse : elles appartiennent au mode smart. En normal, la page ne parle que
     // si la limite reglee pour cette voiture est atteinte.
-    if (smartOn && i > 0) {
+    if (smartOn && i >= 2) {   // [MT2 v0.8] rien avant le 3e tour : le moteur prend sa temperature
       var hausse = suite[i].max - suite[i - 1].max, avant = [];
       for (var q2 = 1; q2 < i; q2++) avant.push(suite[q2].max - suite[q2 - 1].max);
       var hab = mediane(avant);
-      var seuil = Math.max(3, (hab == null ? 0 : Math.max(hab, 0)) + 3);
+      var plancher = tempPlancherTour(c.nom);   // [MT2 v0.8] un plancher par famille
+      var seuil = Math.max(plancher, (hab == null ? 0 : Math.max(hab, 0)) + plancher);
       if (hausse >= seuil) {
         out.push({ n: 2, k: k, s: secMax(lap, ech, k), txt: c.nom + ' +' + Math.round(hausse) + ' \u00b0C ce tour'
           + (hab != null ? ' \u00b7 habituel ' + (hab >= 0 ? '+' : '') + Math.round(hab) + ' \u00b0C/tour' : '')
@@ -858,12 +1633,21 @@ function alerteTemperatures(v, lap) {
     // jaune, en smart : la valeur approche la limite
     if (smartOn && f && maxi >= L[f] - 5) out.push({ n: 1, k: k, s: secMax(lap, ech, k), txt: c.nom + ' ' + Math.round(maxi) + ' \u00b0C \u2014 \u00e0 ' + Math.round(L[f] - maxi) + ' \u00b0C de la limite' });
   }
+  var ess = alerteEssence(v, lap); if (ess) out.push(ess);   // [MT2 v2.0]
   out.sort(function (a, b) { return b.n - a.n; });
   return out;
 }
 var RE_PAS_TEMP = /amb|ambiant|ambient|track|piste|cam\b/i;
 var RE_TEMP_LARGE = /pneu|tire|tyre|frein|brake|egt|echap|exhaust/i;   // ces familles bougent beaucoup
 function tempSeuil(nom) { return RE_TEMP_LARGE.test(nom) ? 15 : 8; }
+// [MT2 v0.8] la hausse acceptee d'un tour a l'autre, par famille (log 944 du 23 sept. 2026)
+function tempPlancherTour(nom) {
+  if (RE_TEMP_LARGE.test(nom)) return 12;          // pneus, freins, echappement : ils bougent fort
+  if (/huile|oil/i.test(nom)) return 7;            // huile vue a +6,1 °C sur un tour normal
+  if (/coolant|eau|ect/i.test(nom)) return 4;      // eau vue a +3,3 °C sur un tour normal
+  if (/iat|air|inlet|intake|admission/i.test(nom)) return 5;
+  return 5;
+}
 // [v50] REMETTRE LE SMART A ZERO. Une qualification sur piste vide donne des sections que la
 // course ne reverra pas : elles ecrasent le tour ideal et faussent les conseils. Le bouton pose
 // une DATE : les tours d'avant restent affiches, mais ne servent plus de reference de VITESSE.
@@ -914,6 +1698,7 @@ function smartTemps(v, lap) {
   return sorties;
 }
 function smartVuMaj() {   // [v60] allumee : fond bleu ; eteinte : un bouton ordinaire
+  barreMaj();   // [MT2]
   var e = document.getElementById('smartVu'); if (!e) return;
   e.classList.toggle('on', smartOn);
   e.title = smartOn ? 'Mode smart ALLUMÉ — toucher pour éteindre' : 'Mode smart éteint — toucher pour allumer';
@@ -984,8 +1769,12 @@ function smartStats(lap, pts, res, trace, m) {
   var cle = lap.num + '|' + res.bornes.map(function (b) { return Math.round(b); }).join(',');
   if (smartCacheStats[cle]) return smartCacheStats[cle];
   var ech = canEchantillons(lap), gaz = smartCanal(lap, RE_GAZ), rpm = smartCanal(lap, RE_RPM);
+  var mapC = smartCanal(lap, RE_MAP);   // [MT2 v1.4]
   var N = res.sect.length, out = [], par = [];
-  for (var j = 0; j < N; j++) { out.push({ kmhMin: null, iMin: -1, sg: 0, ng: 0, sr: 0, nr: 0, chemin: 0, freinage: null, gazPt: null, vSortie: null, sl: 0, nl: 0, lat: null }); par.push([]); }
+  for (var j = 0; j < N; j++) { out.push({ kmhMin: null, iMin: -1, sg: 0, ng: 0, sr: 0, nr: 0, chemin: 0, freinage: null, gazPt: null, vSortie: null, sl: 0, nl: 0, lat: null,
+    sm: 0, nm: 0, map: null, vEntree: null, vMoy: null,
+    smP: 0, srP: 0, nP: 0, mapPlein: null, rpmPlein: null }); par.push([]); }   // [MT2 v1.5] a forte demande seulement
+  var tenue = 0;   // [MT2 v1.7] pas de 500 ms : 4 pas = 2 s de demande tenue
   for (var i = 0; i < pts.length; i++) {
     var j2 = 0; while (j2 < res.bornes.length && res.r[i] >= res.bornes[j2]) j2++;
     var k = Math.min(j2, N - 1), o = out[k];
@@ -994,13 +1783,35 @@ function smartStats(lap, pts, res, trace, m) {
     var t = i * (trace.intervalMs || 500);
     if (gaz >= 0) { var g = canValeurA(lap, ech, gaz, t); if (g != null) { o.sg += g; o.ng++; } }
     if (rpm >= 0) { var q2 = canValeurA(lap, ech, rpm, t); if (q2 != null) { o.sr += q2; o.nr++; } }
+    if (mapC >= 0) { var q3 = canValeurA(lap, ech, mapC, t); if (q3 != null) { o.sm += q3; o.nm++; } }   // [MT2 v1.4]
+    // [MT2 v1.5] LE MAP SUIT LE REGIME AUTANT QUE LE PAPILLON. Comparer des moyennes de tout un
+    // secteur fait dire « le turbo faiblit » a un tour simplement plus lent. On ne garde donc que
+    // les instants a FORTE DEMANDE, et on note le regime qui va avec, pour verifier qu'on compare
+    // deux moments comparables.
+    if (mapC >= 0 && gaz >= 0) {
+      var gp = canValeurA(lap, ech, gaz, t);
+      var mp = canValeurA(lap, ech, mapC, t);
+      if (mp != null && mp > 110) o.suralim = true;   // [MT2 v1.7] plus de 110 kPa : moteur suralimente
+      // ⚠ LE TURBO REPOND EN RETARD. Entre le papillon et la pression, il s'ecoule une seconde ou
+      // deux. Un instant de pleine demande ne dit donc rien. On ne garde que la demande TENUE :
+      // au moins 2 s de papillon a 70 % ou plus, le temps que la pression s'etablisse.
+      tenue = (gp != null && gp >= 70) ? tenue + 1 : 0;
+      if (gp != null && gp >= 70 && tenue >= 4 && mp != null) {
+        var rp = rpm >= 0 ? canValeurA(lap, ech, rpm, t) : null;
+        o.smP += mp; o.srP += (rp == null ? 0 : rp); o.nP++;
+      }
+    }
     if (m) { var pl = circProjeterSigne(m.c, m.dLon + pts[i].dx, m.dLat + pts[i].dy); o.sl += pl.lat; o.nl++; }   // [v64]
   }
   out.forEach(function (o, k2) {
     o.gaz = o.ng ? o.sg / o.ng : null; o.rpm = o.nr ? o.sr / o.nr : null; o.lat = o.nl ? o.sl / o.nl : null;   // [v64]
+    o.map = o.nm ? o.sm / o.nm : null;   // [MT2 v1.4]
+    o.mapPlein = o.nP ? o.smP / o.nP : null; o.rpmPlein = o.nP ? o.srP / o.nP : null;   // [MT2 v1.5]
     var idx = par[k2]; if (!idx.length) return;
     for (var a = 1; a < idx.length; a++) o.chemin += Math.hypot(pts[idx[a]].dx - pts[idx[a - 1]].dx, pts[idx[a]].dy - pts[idx[a - 1]].dy);
     o.vSortie = pts[idx[idx.length - 1]].kmh;
+    o.vEntree = pts[idx[0]].kmh;   // [MT2 v1.4] pour voir si ca accelere dans la section
+    o.vMoy = idx.reduce(function (a2, ii2) { return a2 + pts[ii2].kmh; }, 0) / idx.length;
     var pos = idx.indexOf(o.iMin); if (pos < 0) return;
     var vMax = 0; for (var b = 0; b <= pos; b++) if (pts[idx[b]].kmh > vMax) vMax = pts[idx[b]].kmh;
     for (var c = pos; c >= 0; c--) if (pts[idx[c]].kmh >= vMax * 0.97) { o.freinage = res.r[idx[c]]; break; }   // le dernier point encore lance
@@ -1016,6 +1827,46 @@ function smartStats(lap, pts, res, trace, m) {
 // [v49] LE CONSEIL DE PILOTAGE. On compare la section a CELLE QUI DETIENT LE MEILLEUR TEMPS du
 // jour, et on dit par quoi la difference passe. Deux faits au plus : on parle a un pilote entre
 // deux relais, pas a un ingenieur devant un ecran.
+// [MT2 v1.8] la meme mesure, dite comme une consigne : ce qu'il faut faire au tour suivant
+// [MT2 v2.3] de combien la mesure depasse-t-elle son seuil ? 50 % au seuil, 100 % a « sur ».
+function confiancePct(val, seuil, sur) {
+  var x = Math.abs(val);
+  if (sur <= seuil) return x >= seuil ? 100 : 0;
+  if (x < seuil) return 0;
+  return Math.max(50, Math.min(100, Math.round(50 + 50 * (x - seuil) / (sur - seuil))));
+}
+// le fond a deux tons : plein jusqu'au taux, pale ensuite
+function fondConfiance(coul, pct) {
+  var q = Math.max(0, Math.min(100, Math.round(pct)));
+  if (q >= 100) return coul;
+  var pale = 'color-mix(in srgb, ' + coul + ' 30%, var(--card))';
+  return 'linear-gradient(90deg, ' + coul + ' 0%, ' + coul + ' ' + q + '%, ' + pale + ' ' + q + '%, ' + pale + ' 100%)';
+}
+// les seuils de chaque fait : [seuil qui autorise a parler, valeur qui ne laisse aucun doute]
+var SEUILS = { freinage: [5, 12], point: [2, 5], ligne: [5, 12], gaz: [5, 12], map: [15, 20], temps: [300, 1000] };
+function smartAction(a, b) {
+  if (!a || !b) return '';
+  var faits = [];
+  var dFr = (a.freinage != null && b.freinage != null) ? a.freinage - b.freinage : null;   // + = tu freines plus loin
+  var dMin = (a.kmhMin != null && b.kmhMin != null) ? a.kmhMin - b.kmhMin : null;
+  var dGz = (a.gazPt != null && b.gazPt != null) ? a.gazPt - b.gazPt : null;
+  var dCh = (a.chemin && b.chemin) ? a.chemin - b.chemin : null;
+  if (dFr != null && confiancePct(dFr, SEUILS.freinage[0], SEUILS.freinage[1]) >= 100)
+    faits.push({ p: Math.abs(dFr), t: 'freine ' + Math.round(Math.abs(dFr)) + ' m plus ' + (dFr < 0 ? 'tard' : 'tôt') });
+  if (dMin != null && confiancePct(dMin, SEUILS.point[0], SEUILS.point[1]) >= 100)
+    faits.push({ p: Math.abs(dMin) * 3, t: (dMin < 0 ? 'passe ' + Math.round(-dMin) + ' km/h plus vite au point lent'
+                                                    : 'tu as ' + Math.round(dMin) + ' km/h de plus au point lent, garde-les') });
+  if (dCh != null && confiancePct(dCh, SEUILS.ligne[0], SEUILS.ligne[1]) >= 100)
+    faits.push({ p: Math.abs(dCh), t: (dCh > 0 ? 'serre la ligne, ' + Math.round(dCh) + ' m de trop'
+                                               : 'ta ligne est ' + Math.round(-dCh) + ' m plus courte, garde-la') });
+  if (dGz != null && confiancePct(dGz, SEUILS.gaz[0], SEUILS.gaz[1]) >= 100)
+    faits.push({ p: Math.abs(dGz), t: (dGz > 0 ? 'remets les gaz ' + Math.round(dGz) + ' m plus tôt'
+                                               : 'tu remets les gaz ' + Math.round(-dGz) + ' m plus tôt, garde-le') });
+  if (!faits.length) return '';
+  faits.sort(function (x, y) { return y.p - x.p; });
+  // [MT2 v2.3] le crochet dit : cette consigne est sure. Rien d'autre n'entre ici.
+  return '\u2713 ' + faits.slice(0, 2).map(function (f) { return f.t; }).join(' · ');
+}
 function smartConseil(dt, a, b) {
   if (!a || !b || dt == null) return '';
   var gain = dt < 0, faits = [];
@@ -1045,12 +1896,26 @@ function smartPourquoi(x, mb, a, best, dr, ref) {
   return (d < 0 ? '\u2713 ' : '') + (c || '');
 }
 function smartCause(dt, a, b) {
+  // [MT2 v1.3] LE SEUIL DU PAPILLON SUIT LE BRUIT, mesure sur un vrai journal ECU
+  // (Mont-Tremblant, 19 sept. 2026, Link 50 Hz) : sur une voiture de course, le papillon
+  // est TOUT OU RIEN -- 40 % du temps a plus de 95 %, 26 % du temps a moins de 2 %.
+  // La page ne recoit qu'un echantillon par seconde : la moyenne d'une section estime donc
+  // un rapport cyclique, avec l'erreur d'un tirage. A 20 echantillons, cette erreur vaut
+  // environ 11 points de papillon. L'ancien seuil de 2 points declarait donc « mecanique »
+  // sur du bruit. Le seuil vaut maintenant 50 / racine(n), jamais moins de 8 points, et
+  // rien n'est dit sous 8 echantillons.
   if (dt == null || dt < 300 || !a || !b) return '';
   if (a.gaz == null || b.gaz == null) return '';            // sans papillon, aucune cause n'est dite
+  var n = Math.min(a.ng || 0, b.ng || 0);
+  if (n < 8) return '';                                     // trop peu de secondes : on se tait
   if (a.kmhMin != null && b.kmhMin != null && a.kmhMin >= b.kmhMin - 2) return 'pilotage';
+  var seuil = Math.max(8, 50 / Math.sqrt(n));
   var dg = a.gaz - b.gaz, dr = (a.rpm != null && b.rpm != null) ? a.rpm - b.rpm : null;
-  if (dg >= -2) return '⚠ mécanique ?';          // la vitesse tombe, le pied reste : la voiture ne rend plus
-  if (dr == null || dr < 0) return 'levé de pied';    // papillon ET regime en baisse : trafic ou volonte
+  // [MT2 v1.7] PLUS D'ALARME MECANIQUE SUR LA CARTE. Sur un moteur suralimente, la pression
+  // arrive en retard sur le papillon : un seul tour ne suffit pas a accuser la mecanique. Ce
+  // verdict vit maintenant dans le Coffee break, ou la page dispose de beaucoup plus de points.
+  if (dg > -seuil) return '';                         // la page se tait plutot que d'accuser a tort
+  if (dr == null || dr < 0) return 'levé de pied';     // papillon ET regime en baisse : trafic ou volonte
   return 'pilotage';
 }
 // la position sur la trace a l'instant t (ms depuis le depart), par interpolation
@@ -1151,9 +2016,12 @@ function memoireEtat() {
 }
 function sauvegarder() {
   var d = new Date(), h = d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '_' + ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2);
-  var blob = new Blob([JSON.stringify({ format: 'tracklogics-mt', version: PAGE_VER, date: d.toISOString(), ordre: ordreVoitures, voitures: voitures })], { type: 'application/json' });
+  var blob = new Blob([JSON.stringify({ format: 'tracklogics-mt', version: PAGE_VER, date: d.toISOString(),
+    ordre: ordreVoitures, voitures: voitures,
+    fiches: fiches, pilotes: pilotes })], { type: 'application/json' });   // [MT2 v1.1] le carnet part avec les tours
   var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tracklogics_sauvegarde_' + h + '.json'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
-  jrn('Sauvegarde ecrite : ' + a.download + ' (' + Math.round(blob.size / 1024) + ' ko)');
+  jrn('Sauvegarde ecrite : ' + a.download + ' (' + Math.round(blob.size / 1024) + ' ko, '
+    + Object.keys(fiches).length + ' fiche(s), ' + pilotes.length + ' pilote(s))');
 }
 function restaurer(fichier) {
   if (!fichier) return; var lecteur = new FileReader();
@@ -1167,6 +2035,12 @@ function restaurer(fichier) {
         Object.keys(src.laps || {}).forEach(function (n) { if (!v.laps[n]) { v.laps[n] = src.laps[n]; ajoutes++; } if (!v.traces[n] && src.traces && src.traces[n]) v.traces[n] = src.traces[n]; marquer(m, +n); });
         marquer(m, null);
       });
+      var fichesRep = 0, pilotesRep = 0;   // [MT2 v1.1] le carnet revient, sans ecraser ce qui est la
+      if (s.fiches) Object.keys(s.fiches).forEach(function (k) { if (!fiches[k]) { fiches[k] = s.fiches[k]; fichesRep++; } });
+      if (s.pilotes) s.pilotes.forEach(function (nm) { if (pilotes.indexOf(nm) < 0) { pilotes.push(nm); pilotesRep++; } });
+      if (fichesRep) fichesSauver();
+      if (pilotesRep) pilotesSauver();
+      if (fichesRep || pilotesRep) jrn('Restauration : ' + fichesRep + ' fiche(s) et ' + pilotesRep + ' pilote(s) ajoutes');
       if (!vueMac && ordreVoitures.length) vueMac = ordreVoitures[0];
       catsRelier(); sauver(); rendre(); jrn('Restauration : ' + ajoutes + ' tour(s) ajoute(s) depuis ' + fichier.name); alert(ajoutes + ' tour(s) restaure(s). Les tours deja presents sont gardes tels quels.');
     } catch (e) { alert('Sauvegarde illisible : ' + e.message); }
@@ -1316,6 +2190,8 @@ function rendre0() {
   var laps = lapsSession(v, lap), sess = sessionDe(v, lap), best = sess ? sess.best : null;
   var i = laps.indexOf(lap), prec = i > 0 ? laps[i - 1] : null;
   document.getElementById('tNum').textContent = '#' + lapNumAff(lap);
+  // [MT2 v0.3] LA FICHE NE S'AFFICHE PLUS SUR LA PAGE D'ANALYSE. Elle se remplit et se lit
+  // dans le detail de la seance, par la boite VOITURES. L'ecran des tours reste au chrono.
   document.getElementById('tSess').textContent = sess ? 'Session ' + sess.numJour + ' · ' + jourTexte(sess.debutMs) + (lap.debutUtc ? ' · ' + new Date(lap.debutUtc * 1000).toTimeString().slice(0, 8) : '') : '';
   document.getElementById('tTemps').textContent = duree(lap.dureeMs);
   document.getElementById('tEcart').textContent = prec && prec.dureeMs != null && lap.dureeMs != null ? ecartTexte(lap.dureeMs - prec.dureeMs) : '—';
@@ -1403,6 +2279,30 @@ function filigrane(g, w, h) {
   g.restore();
 }
 var satDemandeMs = 0;
+// [MT2 v0.3] les boutons de la carte : ils appuient sur les commandes d'origine
+function cmdFond() {   // [MT2 v0.7] le bouton bascule entre le PLAN et le SATELLITE
+  satCouche = satCouche === 'sat' ? 'plan' : 'sat';
+  try { localStorage.setItem('mt_couche', satCouche); } catch (e2) {}
+  var e = document.getElementById('satOn'); e.checked = true;   // il y a toujours un fond
+  satImg = null; satCle = '';   // la couche a change : l'ancienne image ne sert plus
+  satBascule(); carteCmdMaj();
+}
+function cmdOrient() {
+  var m = carte.mode === 'nord' ? 'max' : 'nord';
+  var r = document.querySelector('input[name="orient"][value="' + m + '"]'); if (r) r.checked = true;
+  orientChoisir(m); carteCmdMaj();
+}
+function cmdVerrou() { verrouBascule(); carteCmdMaj(); }
+function carteCmdMaj() {   // l'etat se lit sur les boutons : allume = actif
+  var f = document.getElementById('cmdFond'), o = document.getElementById('cmdOrient'), vv = document.getElementById('cmdVerrou');
+  if (f) {   // [MT2 v0.6] gris = aucun fond, bleu = plan, orange = satellite
+    f.classList.toggle('on', satVoulu && satCouche === 'sat');
+    f.classList.toggle('bleu', satVoulu && satCouche === 'plan');
+    f.title = satCouche === 'plan' ? 'Fond plan — toucher pour le satellite' : 'Fond satellite — toucher pour le plan';
+  }
+  if (o) { o.classList.toggle('on', carte.mode === 'nord'); o.title = carte.mode === 'nord' ? 'Nord en haut — toucher pour maximiser le tracé' : 'Tracé au plus grand — toucher pour le nord en haut'; }
+  if (vv) { vv.classList.toggle('vert', !!carte.verrou); vv.title = carte.verrou ? 'Vue verrouillée — toucher pour la libérer' : 'Vue libre — toucher pour la verrouiller'; }
+}
 function orientChoisir(m) { carte.mode = m; carte.zoom = 1; carte.rot = 0; carte.panX = carte.panY = 0; try { localStorage.setItem('mt_orient', m); } catch (e) {} rendre(); }
 function carteRecadrer() { carte.zoom = 1; carte.rot = 0; carte.panX = carte.panY = 0; rendre(); }
 // l'angle qui couche le grand axe du trace dans le sens le plus long du canevas
@@ -1476,7 +2376,7 @@ function dessiner(v, lap) {
     cle = { lat: vLat, lon: vLon, s: s, D: D0, w: w, h: h };
     if (satImg) {
       var ddy = (satImg.lat - vLat) * rad0 * R0, ddx = (satImg.lon - vLon) * rad0 * R0 * Math.cos(vLat * rad0);
-      satOk = Math.hypot(ddx, ddy) * s < D0 / 4 && Math.abs(s / satImg.s - 1) < 0.25 && Math.abs(satImg.D - D0) < 2;
+      satOk = satImg.couche === satCouche && Math.hypot(ddx, ddy) * s < D0 / 4 && Math.abs(s / satImg.s - 1) < 0.25 && Math.abs(satImg.D - D0) < 2;
     }
     if (satVoulu && satImg) {   // [v68] la case decochee retire le fond tout de suite
       // l'image se pose sur son centre geographique, ramene dans le repere de CE tour
@@ -1501,7 +2401,7 @@ function dessiner(v, lap) {
       var dedans = i >= smartSectionVue.i0 && i <= smartSectionVue.i1;
       var zone = smartSectionVue.z0 != null && i >= smartSectionVue.z0 && i <= smartSectionVue.z1;   // [v80]
       var montre = smartSectionVue.z0 != null ? zone : dedans;   // [v80] la zone seule, si on la connait
-      g.strokeStyle = montre ? smartSectionVue.couleur : 'rgba(150,150,150,0.55)';
+      g.strokeStyle = montre ? smartSectionVue.couleur : grisHorsSection();   // [MT2 v0.8]
       g.globalAlpha = 1;
       g.lineWidth = montre ? 6 : 3;
     } else { g.globalAlpha = 1; g.strokeStyle = dvs ? couleurDelta((dvs[i - 1] + dvs[i]) / 2) : couleur((pts[i - 1].kmh + pts[i].kmh) / 2, vmin, vmax); }
@@ -1609,17 +2509,26 @@ function dessiner(v, lap) {
   var t = v.traces[lap.num], manque = t ? t.nb - t.parts.filter(function (p) { return p; }).length : 0;
   // [v82] la legende des couleurs part dans les deux modes. L'ALERTE DES MORCEAUX MANQUANTS RESTE :
   // une trace trouee fausse les partielles, ca ne se tait pas.
-  var tronq = lap.can && lap.can.tronque;   // [v84]
+  var tronq = lap.can && lap.can.tronque;   // [MT2 v1.9]
   lg.textContent = manque > 0 ? '⚠ ' + manque + ' morceau(x) de trace manquant(s) : les partielles sont approximatives.'
                 : (tronq ? '⚠ tour trop long : les canaux s’arrêtent avant la fin. Températures et causes incomplètes.' : '');
   lg.style.color = (manque > 0 || tronq) ? 'var(--warn)' : '';
   {   // [v81] sous la carte : la bande en smart, le mode d'emploi en normal
     var bh = document.getElementById('smartBande'), cb = document.getElementById('carteBande'), bb = document.getElementById('smartBandeBas');
-    var montreB = smartOn && bh && bh.style.display !== 'none' && bh.textContent;
-    if (montreB) { bb.textContent = bh.textContent; bb.style.background = bh.style.background; }
+    // [MT2 v1.8] LA TEMPERATURE PASSE DEVANT. C'est le probleme le plus frequent et le plus grave :
+    // il prend la boite sous la carte, et le verdict de secteur attend son tour.
+    var chaud = smartOn ? alerteTemperatures(v, lap) : [];
+    var montreB = smartOn && ((chaud && chaud.length) || (bh && bh.style.display !== 'none' && bh.textContent));
+    if (montreB) {
+      if (chaud && chaud.length) {
+        bb.textContent = chaud[0].txt + (chaud.length > 1 ? '  (+' + (chaud.length - 1) + ')' : '');
+        bb.style.background = chaud[0].n === 3 ? 'var(--warn)' : '#c47f1b';
+      } else { bb.textContent = bh.textContent; bb.style.background = bh.style.background; }
+    }
     cb.style.display = montreB ? '' : 'none';
     document.getElementById('carteAide').style.display = smartOn ? 'none' : '';
   }
+  carteCmdMaj();   // [MT2 v0.3]
   if (satVoulu && cle && !satOk) satPlanifier(lap, cle);
 }
 function satBascule() {
@@ -1633,20 +2542,20 @@ function satPlanifier(lap, cle) {
   satDemandeMs = Date.now();
   setTimeout(function () { if (Date.now() - satDemandeMs >= 550 && proj && proj.cle && satCleTexte(proj.cle) === satCleTexte(cle) && satCle !== satCleTexte(cle)) satCharger(lap, cle); }, 600);
 }
-function satCleTexte(c) { return c.lat.toFixed(5) + '/' + c.lon.toFixed(5) + '/' + Math.round(c.s * 100) + '/' + Math.round(c.D); }
+function satCleTexte(c) { return satCouche + '/' + c.lat.toFixed(5) + '/' + c.lon.toFixed(5) + '/' + Math.round(c.s * 100) + '/' + Math.round(c.D); }
 function satCharger(lap, cle) {
   if (!cle) return;
   var R = 6371000, rad = Math.PI / 180, demi = cle.D / (2 * cle.s);   // demi-cote du carre, en metres
   function lat(dy) { return cle.lat + (dy / R) / rad; } function lon(dx) { return cle.lon + (dx / (R * Math.cos(cle.lat * rad))) / rad; }
   function d6(x) { return x.toFixed(6); }
   var W = Math.max(64, Math.min(1024, Math.round(cle.D)));
-  var url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=' + d6(lon(-demi)) + ',' + d6(lat(-demi)) + ',' + d6(lon(demi)) + ',' + d6(lat(demi)) + '&bboxSR=4326&imageSR=3857&size=' + W + ',' + W + '&format=png&transparent=false&f=image';
-  document.getElementById('satEtat').textContent = 'Chargement du fond...';
+  var url = 'https://server.arcgisonline.com/ArcGIS/rest/services/' + (SAT_SERVICES[satCouche] || SAT_SERVICES.sat) + '/MapServer/export?bbox=' + d6(lon(-demi)) + ',' + d6(lat(-demi)) + ',' + d6(lon(demi)) + ',' + d6(lat(demi)) + '&bboxSR=4326&imageSR=3857&size=' + W + ',' + W + '&format=png&transparent=false&f=image';
+  document.getElementById('satEtat').textContent = 'Chargement du fond ' + (satCouche === 'plan' ? 'plan' : 'satellite') + '...';
   var im = new Image(); im.crossOrigin = 'anonymous';
-  im.lat = cle.lat; im.lon = cle.lon; im.s = cle.s; im.D = cle.D;
+  im.lat = cle.lat; im.lon = cle.lon; im.s = cle.s; im.D = cle.D; im.couche = satCouche;   // [MT2 v0.6]
   im.onload = function () { if (!satVoulu) return;   // [v68] la case a ete decochee pendant le chargement
     satImg = im; satCle = satCleTexte(cle); document.getElementById('satEtat').textContent = ''; rendre(); };
-  im.onerror = function () { satImg = null; satCle = ''; document.getElementById('satEtat').textContent = 'Fond satellite non recu (reseau ?).'; };
+  im.onerror = function () { satImg = null; satCle = ''; document.getElementById('satEtat').textContent = 'Fond ' + (satCouche === 'plan' ? 'plan' : 'satellite') + ' non recu (reseau ?).'; };
   im.src = url;
 }
 // ---- les gestes : un doigt deplace, deux doigts zooment et tournent, double toucher recadre ----
@@ -1986,11 +2895,14 @@ function circuitRendre(v, lap) {
       var a = stats && stats[pireI], b = refStats && refStats[pireI];
       var cause = (a && b) ? smartCause(pire, a, b) : '';
       var conseil = (a && meilleurStats && meilleurStats[pireI]) ? smartConseil(res.sect[pireI] - (meilleurs ? meilleurs[pireI] : res.sect[pireI]), a, meilleurStats[pireI]) : '';
+      var action = (a && meilleurStats && meilleurStats[pireI]) ? smartAction(a, meilleurStats[pireI]) : '';   // [MT2 v1.8]
+      if (action) conseil = action;   // une consigne vaut mieux qu'une comparaison, en piste
       // [v47] la bande a cote du nom : la section, le temps perdu, la cause
       var nomP = (bornesV ? 'S' : 'P') + (pireI + 1);
       var motBande = (cause && cause !== 'pilotage') ? cause : (conseil || 'pilotage');
       var dec = decal[pireI];
-      var dclB = decalTexte(dec);   // [v67]
+      // [MT2 v2.4] en piste, le detour de ligne ne parle qu a 6 m : a 3 m, ce n est pas sur
+      var dclB = (dec != null && Math.abs(dec) >= 6) ? decalTexte(dec) : '';
       if (dclB) motBande = (motBande === 'pilotage') ? dclB : motBande + ' · ' + dclB;
       bande.textContent = nomP + ' · ' + tempsSect(pire) + ' · ' + motBande;
       var coulB = /mécanique/.test(motBande) ? 'var(--warn)' : (cause === 'levé de pied' ? '#c47f1b' : '#8a6d1f');
@@ -2107,6 +3019,7 @@ try { satVoulu = localStorage.getItem('mt_sat') === '1'; document.getElementById
 document.querySelector('input[name=orient][value=' + carte.mode + ']').checked = true;
 try { details = localStorage.getItem('mt_details') === '1'; } catch (e) {}
 document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails';
+document.body.classList.toggle('avecAide', details);   // [MT2 v2.5]
 try { smartOn = localStorage.getItem('mt_smart') === '1'; } catch (e) {}
 try { smartZeroMs = +(localStorage.getItem('mt_smartzero') || 0) || 0; } catch (e) {}
 try { limitesTout = JSON.parse(localStorage.getItem('mt_limites') || '{}') || {}; } catch (e) { limitesTout = {}; }
@@ -2128,6 +3041,7 @@ try { partiellesOn = localStorage.getItem('mt_part') !== '0'; } catch (e) {}
 document.getElementById('partOn').checked = partiellesOn;   // [v78]
 circuitsCharger();
 rendre();
+barreMaj();   // [MT2]
 setInterval(function () { rendre(); memoireEtat(); }, 10000);   // « vu il y a … », le point de portee, la memoire
 jrn('Page ' + PAGE_VER + ' prete.');
 </script>
