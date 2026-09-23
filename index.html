@@ -2018,7 +2018,7 @@ function memoireEtat() {
 // [MT2 v2.6] charge les tours d'exemple poses a cote de la page
 function demoCharger() {
   var b = event && event.target; if (b) { b.disabled = true; b.textContent = 'Chargement...'; }
-  fetch('_demo.json').then(function (r) { if (!r.ok) throw new Error('fichier ' + r.status); return r.text(); })
+  fetch('demo.json').then(function (r) { if (!r.ok) throw new Error('fichier ' + r.status); return r.text(); })
     .then(function (t) {
       restaurer(new File([t], '_demo.json', { type: 'application/json' }));
       if (b) { b.disabled = false; b.textContent = 'Démonstration'; }
