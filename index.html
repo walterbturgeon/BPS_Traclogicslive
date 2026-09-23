@@ -261,7 +261,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'MT v83';
+var PAGE_VER = 'MT v84';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -689,12 +689,25 @@ function decodeCatalogue(v, b) {
 function decodeCanaux(v, b) {
   if (b.length < 10) return;
   var dv = new DataView(b.buffer, b.byteOffset), num = dv.getUint16(1, true), part = b[3], nb = b[4], n = b[5], s0 = dv.getUint16(6, true);
-  if (b.length < 10 + 9 * n) { jrn('Canaux tronques (' + b.length + ' o, ' + n + ' s) pour ' + v.nom); return; }
+  var fmt = b[9] || 0, variable = !!(fmt & 1), tronque = !!(fmt & 2);   // [v84]
   var lap = v.laps[num] || { num: num, recuMs: Date.now() };
   var can = lap.can || { nb: nb, parts: {} }; can.nb = nb;
+  if (tronque && !can.tronque) { can.tronque = true; jrn('Tour #' + lapNumAff(lap) + ' : canaux tronqués par le boîtier (tour trop long)'); }
   var rows = [];
-  for (var i = 0; i < n; i++) { var o = 10 + i * 9, r = [b[o]]; for (var k = 0; k < 8; k++) r.push(b[o + 1 + k]); rows.push(r); }
-  can.parts[part] = { s0: s0, rows: rows };
+  if (variable) {
+    // masque, puis SEULEMENT les valeurs presentes. Une voie absente garde sa valeur d'avant.
+    var o = 10;
+    for (var i = 0; i < n; i++) {
+      if (o >= b.length) { jrn('Canaux courts (' + b.length + ' o) pour ' + v.nom); break; }
+      var m = b[o++], r = [m, 0, 0, 0, 0, 0, 0, 0, 0];
+      for (var k = 0; k < 8; k++) if (m & (1 << k)) { r[1 + k] = (o < b.length) ? b[o] : 0; o++; }
+      rows.push(r);
+    }
+  } else {
+    if (b.length < 10 + 9 * n) { jrn('Canaux tronques (' + b.length + ' o, ' + n + ' s) pour ' + v.nom); return; }
+    for (var i2 = 0; i2 < n; i2++) { var o2 = 10 + i2 * 9, r2 = [b[o2]]; for (var k2 = 0; k2 < 8; k2++) r2.push(b[o2 + 1 + k2]); rows.push(r2); }
+  }
+  can.parts[part] = { s0: s0, rows: rows, variable: variable };
   lap.can = can; v.laps[num] = lap;
   if (!lap.cat && v.cats && v.cats[lapSessionCle(lap)]) lap.cat = v.cats[lapSessionCle(lap)];   // [v54] celui de la session
 }
@@ -706,9 +719,17 @@ function canEchantillons(lap) {
   return out;
 }
 // la valeur reelle du canal k a la seconde s (null si absente)
+// [v84] LA DERNIERE VALEUR CONNUE TIENT. Le boitier n'envoie une voie que si elle a bouge :
+// entre deux envois, la valeur n'a pas disparu, elle n'a pas change. On remonte jusqu'a 30 s
+// en arriere pour la retrouver. Au-dela, on rend « rien » plutot que d'inventer.
 function canValeur(lap, ech, k, sec) {
-  var r = ech[sec]; if (!r || !(r[0] & (1 << k))) return null;
-  var c = lap.cat && lap.cat.ch[k]; return c ? r[1 + k] * c.div + c.off : r[1 + k];
+  var r = ech[sec], c = lap.cat && lap.cat.ch[k];
+  if (r && (r[0] & (1 << k))) return c ? r[1 + k] * c.div + c.off : r[1 + k];
+  for (var q = sec - 1, n = 0; q >= 0 && n < 30; q--, n++) {
+    var x = ech[q];
+    if (x && (x[0] & (1 << k))) return c ? x[1 + k] * c.div + c.off : x[1 + k];
+  }
+  return null;
 }
 // min / moyenne / max / n / seconde du max d'un canal sur le tour
 function canResume(lap, ech, k) {
@@ -1588,8 +1609,10 @@ function dessiner(v, lap) {
   var t = v.traces[lap.num], manque = t ? t.nb - t.parts.filter(function (p) { return p; }).length : 0;
   // [v82] la legende des couleurs part dans les deux modes. L'ALERTE DES MORCEAUX MANQUANTS RESTE :
   // une trace trouee fausse les partielles, ca ne se tait pas.
-  lg.textContent = manque > 0 ? '⚠ ' + manque + ' morceau(x) de trace manquant(s) : les partielles sont approximatives.' : '';
-  lg.style.color = manque > 0 ? 'var(--warn)' : '';
+  var tronq = lap.can && lap.can.tronque;   // [v84]
+  lg.textContent = manque > 0 ? '⚠ ' + manque + ' morceau(x) de trace manquant(s) : les partielles sont approximatives.'
+                : (tronq ? '⚠ tour trop long : les canaux s’arrêtent avant la fin. Températures et causes incomplètes.' : '');
+  lg.style.color = (manque > 0 || tronq) ? 'var(--warn)' : '';
   {   // [v81] sous la carte : la bande en smart, le mode d'emploi en normal
     var bh = document.getElementById('smartBande'), cb = document.getElementById('carteBande'), bb = document.getElementById('smartBandeBas');
     var montreB = smartOn && bh && bh.style.display !== 'none' && bh.textContent;
