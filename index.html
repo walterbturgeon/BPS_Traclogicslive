@@ -72,6 +72,7 @@
   .btn { background:var(--ink); color:var(--bg); border:0; border-radius:10px; padding:10px 16px; font-size:1em; cursor:pointer; }
   .btn.sec { background:var(--tab); color:var(--ink); }
   .btn.warn { background:var(--warn); color:#fff; }
+  .btn.poub { background:transparent; color:var(--warn); border:1px solid var(--line); padding:8px 10px; line-height:0; }
   .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   .small { color:var(--muted); font-size:.85em; }
   .tabs { display:flex; gap:6px; margin:0 16px 12px; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden;
@@ -161,6 +162,7 @@
   .btn { background:var(--tab); color:var(--ink); border:1px solid var(--line); border-radius:12px;
          font-weight:700; letter-spacing:.02em; }
   .btn.sec { background:transparent; color:var(--muted); }
+  .btn.poub { background:transparent; color:var(--warn); border-color:var(--line); }
   .btn.action { background:var(--accent); border-color:var(--accent); color:#120800;
                 text-transform:uppercase; letter-spacing:.06em; }
   /* les onglets des voitures : pastilles, la voiture vue en orange plein */
@@ -198,7 +200,9 @@
   /* [MT2 v2.1] un temps ne se coupe pas en deux lignes : la colonne garde son chiffre entier */
   table td.num, table td.v { white-space:nowrap; }   /* les chiffres seulement : le texte doit pouvoir passer a la ligne */
   .panneau table { table-layout:auto; width:100%; }
-  .panneau table td { overflow-wrap:anywhere; }
+  /* [MT2 v2.9] on coupe aux espaces, jamais au milieu d un mot, et la premiere colonne garde sa place */
+  .panneau table td { overflow-wrap:break-word; }
+  .panneau table td:first-child, .panneau table th:first-child { min-width:96px; }
   /* [MT2 v2.2] une pastille ne se coupe jamais en syllabes : MECANIQUE tient sur une ligne */
   .bande { white-space:nowrap; }
   /* [MT2 v2.5] les explications ne sortent qu avec le bouton Details */
@@ -282,6 +286,14 @@
   <div class="tete"><b>Voitures et fiches de séance</b>
     <button class="btn sec" onclick="panneauFermer('panVoitures')">Fermer</button></div>
   <div id="panVoituresCorps"></div>
+</div>
+
+<!-- [MT2 v2.9] le profil d'une voiture : masse, puissance, couple -->
+<div class="panneau" id="panProfil" role="dialog" aria-label="Profil de la voiture">
+  <div class="tete"><b id="profilTitre">Profil</b>
+    <span><button class="btn" onclick="profilEnregistrer()">Enregistrer</button>
+    <button class="btn sec" onclick="panneauFermer('panProfil')">Fermer</button></span></div>
+  <div id="profilCorps"></div>
 </div>
 
 <!-- [MT2] le panneau des pilotes -->
@@ -443,7 +455,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v2.7';
+var PAGE_VER = 'TRACLOGICS v3.0';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -576,9 +588,22 @@ var vueMac = null;        // l'onglet ouvert
 // c'est le carnet de l'equipe, garde dans la tablette, a cote des tours.
 // La cle d'une fiche = MAC de la voiture + jour + numero de session.
 // =====================================================================
-var fiches = {}, pilotes = [];
+var fiches = {}, pilotes = [], profils = {};   // [MT2 v2.9] profils : par MAC de voiture
 try { fiches = JSON.parse(localStorage.getItem('mt2_fiches') || '{}'); } catch (e) { fiches = {}; }
 try { pilotes = JSON.parse(localStorage.getItem('mt2_pilotes') || '[]'); } catch (e) { pilotes = []; }
+pilotes = pilotes.map(function (x) { return typeof x === 'string' ? { nom: x } : x; });   // [MT2 v2.9] un pilote porte un poids
+try { profils = JSON.parse(localStorage.getItem('mt2_profils') || '{}'); } catch (e) { profils = {}; }
+function profilsSauver() { try { localStorage.setItem('mt2_profils', JSON.stringify(profils)); } catch (e) {} }
+function profilDe(mac) { return profils[mac] || {}; }
+function piloteDe(nom) { for (var i = 0; i < pilotes.length; i++) if (pilotes[i].nom === nom) return pilotes[i]; return null; }
+// [MT2 v2.9] la masse en piste : voiture + pilote de la seance
+function masseDe(mac, sn) {
+  var pr = profilDe(mac), f = sn ? ficheEffective(mac, sn).f : null;
+  var mv = parseFloat(pr.masse), pil = f && f.pilote ? piloteDe(f.pilote) : null;
+  var mp = pil ? parseFloat(pil.poids) : NaN;
+  if (!isFinite(mv)) return null;
+  return { voiture: mv, pilote: isFinite(mp) ? mp : 0, total: mv + (isFinite(mp) ? mp : 0), avecPilote: isFinite(mp) };
+}
 function fichesSauver() { try { localStorage.setItem('mt2_fiches', JSON.stringify(fiches)); } catch (e) {} }
 function pilotesSauver() { try { localStorage.setItem('mt2_pilotes', JSON.stringify(pilotes)); } catch (e) {} }
 function ficheCle(mac, sn) { return mac + '|' + sn.jour + '|' + sn.cle; }
@@ -691,6 +716,26 @@ function cafeRendre() {
          + '<td class="num" ' + cl + '>' + (delta == null ? '—' : (delta > 0 ? '+' : '') + d(delta)) + '</td></tr>';
   }
   var ds = function (ms) { return (ms / 1000).toFixed(2).replace('.', ',') + ' s'; };
+  {   // [MT2 v2.9] la masse en piste, si le profil et la fiche la donnent
+    var mA = masseDe(mac, A), mB = masseDe(mac, B), pr2 = profilDe(mac);
+    if (mA || mB) {
+      var ligneM = function (m2) {
+        if (!m2) return '—';
+        return Math.round(m2.total) + ' kg' + (m2.avecPilote ? ' (' + Math.round(m2.voiture) + ' + ' + Math.round(m2.pilote) + ')' : ' <span class="small">sans pilote</span>');
+      };
+      h += '<div class="card"><b>Masse en piste</b><table style="margin-top:8px"><tr><th>Mesure</th><th>A</th><th>B</th></tr>'
+         + '<tr><td>Masse</td><td class="num">' + ligneM(mA) + '</td><td class="num">' + ligneM(mB) + '</td></tr>';
+      if (pr2.hp && (mA || mB)) {
+        var rap = function (m2) { return m2 ? (m2.total / parseFloat(pr2.hp)).toFixed(2).replace('.', ',') + ' kg/HP' : '—'; };
+        h += '<tr><td>Masse sur puissance</td><td class="num">' + rap(mA) + '</td><td class="num">' + rap(mB) + '</td></tr>';
+      }
+      h += '</table>';
+      if (mA && mB && Math.abs(mA.total - mB.total) >= 5)
+        h += '<div class="small" style="margin-top:6px;color:var(--accent)">\u26a0 ' + Math.round(Math.abs(mB.total - mA.total))
+           + ' kg d\u2019écart entre les deux séances : une partie du temps vient de là.</div>';
+      h += '</div>';
+    }
+  }
   h += '<div class="card"><b>Chrono</b><table style="margin-top:8px"><tr><th>Mesure</th><th>A</th><th>B</th><th>Écart</th></tr>'
      + '<tr><td>Tours comptés</td><td class="num">' + sa.n + '</td><td class="num">' + sb.n + '</td><td class="num">—</td></tr>'
      + lig2('Meilleur tour', sa.best, sb.best, ds)
@@ -822,7 +867,62 @@ function cafeMateriel(v, mac) {
   return '<div class="small" style="margin:14px 2px 6px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:800">Le matériel a-t-il compté ?</div>' + h;
 }
 // [MT2 v1.4] ce qui explique un secteur : la demande contre la reponse
-function cafeCause(b, a, dt) {   // b = secteur de la seance B, a = celui de A
+// [MT2 v2.8] les couples (regime, MAP) a pleine charge TENUE d'un tour
+function mapPaires(v, lap) {
+  var kg = smartCanal(lap, RE_GAZ), km = smartCanal(lap, RE_MAP), kr = smartCanal(lap, RE_RPM);
+  if (kg < 0 || km < 0 || kr < 0) return [];
+  var tr = v.traces[lap.num], pts = traceEntiere(tr); if (!pts.length) return [];
+  var ech = canEchantillons(lap), inter = (tr && tr.intervalMs) || 500, tenue = 0, out = [];
+  for (var i = 0; i < pts.length; i++) {
+    var t = i * inter, g = canValeurA(lap, ech, kg, t);
+    tenue = (g != null && g >= 70) ? tenue + 1 : 0;
+    if (tenue < 4) continue;                       // 2 s de demande tenue : le turbo a le temps
+    var m = canValeurA(lap, ech, km, t), r = canValeurA(lap, ech, kr, t);
+    if (m != null && r != null && r > 1500) out.push({ rpm: r, map: m });
+  }
+  return out;
+}
+// la courbe du moteur : la mediane du MAP par tranche de 500 tr/min, sur les premiers tours
+function mapCourbe(v, laps) {
+  var bacs = {};
+  laps.forEach(function (l) {
+    mapPaires(v, l).forEach(function (q) {
+      var b = Math.round(q.rpm / 500) * 500;
+      (bacs[b] = bacs[b] || []).push(q.map);
+    });
+  });
+  var cles = Object.keys(bacs).map(Number).sort(function (x, y) { return x - y; });
+  var pts = cles.filter(function (b) { return bacs[b].length >= 3; })
+                .map(function (b) { return { rpm: b, map: mediane(bacs[b]) }; });
+  return pts.length >= 2 ? pts : null;
+}
+function mapAttendu(courbe, rpm) {
+  if (!courbe || !courbe.length) return null;
+  if (rpm <= courbe[0].rpm) return courbe[0].map;
+  if (rpm >= courbe[courbe.length - 1].rpm) return courbe[courbe.length - 1].map;
+  for (var i = 1; i < courbe.length; i++) {
+    if (rpm <= courbe[i].rpm) {
+      var a2 = courbe[i - 1], b2 = courbe[i], f = (rpm - a2.rpm) / Math.max(b2.rpm - a2.rpm, 1);
+      return a2.map + f * (b2.map - a2.map);
+    }
+  }
+  return null;
+}
+// la deviation d'un tour contre la courbe : mediane de (mesure - attendu), a regime egal
+function mapDeviation(courbe, paires) {
+  if (!courbe || paires.length < 5) return null;
+  var d = [];
+  paires.forEach(function (q) { var att = mapAttendu(courbe, q.rpm); if (att != null) d.push(q.map - att); });
+  return d.length >= 5 ? { ecart: mediane(d), n: d.length } : null;
+}
+// [MT2 v2.8] ce qu'un ecart de puissance peut expliquer, en secondes
+// vitesse proportionnelle a la racine cubique de la puissance (la trainee croit comme v2)
+function budgetPuissance(mapRef, mapVu, tempsSect, partPleinGaz) {
+  if (!mapRef || !mapVu || mapVu >= mapRef) return 0;
+  var perteV = 1 - Math.pow(mapVu / mapRef, 1 / 3);
+  return tempsSect * perteV * Math.max(0.15, Math.min(1, partPleinGaz));
+}
+function cafeCause(b, a, dt, tSect) {   // b = secteur de la seance B, a = celui de A ; tSect = temps du secteur A
   if (!a || !b) return null;
   var n = Math.min(a.ng || 0, b.ng || 0);
   var sGaz = Math.max(8, 50 / Math.sqrt(Math.max(n, 1)));      // le bruit d'un papillon tout ou rien a 1 Hz
@@ -841,12 +941,20 @@ function cafeCause(b, a, dt) {   // b = secteur de la seance B, a = celui de A
   var dMapP = (a.mapPlein != null && b.mapPlein != null) ? b.mapPlein - a.mapPlein : null;
   var dRpmP = (a.rpmPlein != null && b.rpmPlein != null) ? b.rpmPlein - a.rpmPlein : null;
   // [MT2 v1.6] seuil donne par le pilote le 23 sept. : 15 kPa parle, 20 kPa ne laisse pas de doute
-  var sMapP = 15, netP = 20;
+  var sMapP = 25, netP = 40;   // [MT2 v2.8] jalon du pilote : 25 kPa parle, 40 ne laisse aucun doute
   var suralim = !!(a.suralim || b.suralim);
   var comparable = nP >= (suralim ? 5 : 3) && (dRpmP == null || Math.abs(dRpmP) <= 500);   // [MT2 v1.7]
-  if (comparable && dMapP != null && dMapP <= -sMapP)
+  if (comparable && dMapP != null && dMapP <= -sMapP) {
+    // [MT2 v2.8] ce que cet ecart de MAP peut expliquer, contre ce qui a ete perdu
+    var part = (b.ng ? (b.nP || 0) / b.ng : 0.3);
+    var budget = budgetPuissance(a.mapPlein, b.mapPlein, tSect || 0, part);
+    if (dt != null && budget > 0 && Math.abs(dt) > 3 * budget)
+      return { type: 'inconnu', pct: 100,
+        txt: 'le MAP est ' + Math.round(-dMapP) + ' kPa plus bas, mais cela n\u2019explique qu\u2019environ '
+           + (budget / 1000).toFixed(2).replace('.', ',') + ' s : la perte vient d\u2019ailleurs' };
     return { type: 'mecanique', pct: confiancePct(dMapP, sMapP, netP),
              txt: 'à pleine charge tenue et à régime égal, le MAP tombe de ' + Math.round(-dMapP) + ' kPa — admission ou turbo' };
+  }
   if (comparable && dMapP != null && Math.abs(dMapP) < sMapP && dV != null && dV < -2 && (dRpm == null || dRpm < 0))
     return { type: 'mecanique', pct: confiancePct(dV, 2, 8),
              txt: 'même demande, même MAP à pleine charge, mais ' + Math.round(-dV) + ' km/h de moins en moyenne — le moteur ne rend plus' };
@@ -880,16 +988,38 @@ function voiesManquantes(lap) {
   if (!v2.lambda) out.push('lambda');
   return out;
 }
+// [MT2 v2.8] la piste a-t-elle change ? perte repartie, ligne et freinages inchanges,
+// vitesse plus basse partout. C'est la signature d'une adherence differente.
+function cafeAdherence(sa, sb) {
+  if (!sa.stats || !sb.stats || !sa.sect || !sb.sect || sa.sect.length < 2) return null;
+  var rel = [], ligne = true, freins = true, plusLent = true;
+  for (var i = 0; i < sa.sect.length; i++) {
+    var x = sa.sect[i], y = sb.sect[i], A = sa.stats[i], B = sb.stats[i];
+    if (x == null || y == null || !A || !B) return null;
+    rel.push((y - x) / x);
+    if (A.chemin && B.chemin && Math.abs(B.chemin - A.chemin) / A.chemin > 0.02) ligne = false;
+    if (A.freinage != null && B.freinage != null && Math.abs(B.freinage - A.freinage) > 15) freins = false;
+    if (!(A.vMoy != null && B.vMoy != null && B.vMoy < A.vMoy)) plusLent = false;
+  }
+  var moy = rel.reduce(function (p2, q) { return p2 + q; }, 0) / rel.length;
+  if (moy < 0.03) return null;                      // moins de 3 % de perte : rien a expliquer
+  var etale = Math.max.apply(null, rel) - Math.min.apply(null, rel);
+  if (!(ligne && freins && plusLent && etale < 0.4 * moy)) return null;
+  return { pct: Math.min(100, Math.round(60 + 40 * (1 - etale / (0.4 * moy)))),
+           moy: moy, etale: etale };
+}
 function cafeCauses(sa, sb) {
   if (!sa.stats || !sb.stats || !sa.sect || !sb.sect || sa.sect.length !== sb.sect.length)
     return '<div class="card"><b>Causes possibles</b><div class="small" style="margin-top:6px">Il manque la trace ou les canaux d\u2019une des deux séances.</div></div>';
   var manque = sb.bestLap ? voiesManquantes(sb.bestLap) : [];   // [MT2 v2.4]
-  var COUL = { mecanique: 'var(--warn)', pilotage: '#3D8BFF', demande: 'var(--muted)', inconnu: 'var(--muted)' };
-  var NOM = { mecanique: 'MÉCANIQUE', pilotage: 'PILOTAGE', demande: 'DEMANDE', inconnu: 'INCONNU' };
-  var somme = { mecanique: 0, pilotage: 0, demande: 0, inconnu: 0 }, lignes = [];
+  var COUL = { mecanique: 'var(--warn)', pilotage: '#3D8BFF', demande: 'var(--muted)', inconnu: 'var(--muted)', adherence: '#A55EEA' };
+  var NOM = { mecanique: 'MÉCANIQUE', pilotage: 'PILOTAGE', demande: 'DEMANDE', inconnu: 'INCONNU', adherence: 'ADHÉRENCE' };
+  var adh = cafeAdherence(sa, sb);   // [MT2 v2.8] elle passe devant toute cause mecanique
+  var somme = { mecanique: 0, pilotage: 0, demande: 0, inconnu: 0, adherence: 0 }, lignes = [];
   sa.sect.forEach(function (x, i) {
     var y = sb.sect[i]; if (x == null || y == null) return;
-    var d = y - x, c = cafeCause(sb.stats[i], sa.stats[i], d);
+    var d = y - x, c = adh ? { type: 'adherence', pct: adh.pct, txt: 'vitesse plus basse partout, même ligne, même freinage' }
+                           : cafeCause(sb.stats[i], sa.stats[i], d, x);
     if (!c) return;
     somme[c.type] += d;
     lignes.push({ i: i, d: d, c: c });
@@ -909,10 +1039,13 @@ function cafeCauses(sa, sb) {
                  + '<td style="text-align:left">' + l.c.txt + '</td></tr>';
           }).join('') + '</table>';
   var parts = [];
-  ['mecanique', 'pilotage', 'demande', 'inconnu'].forEach(function (k) {
+  ['adherence', 'mecanique', 'pilotage', 'demande', 'inconnu'].forEach(function (k) {
     if (Math.abs(somme[k]) >= 100) parts.push('<b style="color:' + COUL[k] + '">' + NOM[k].toLowerCase() + '</b> ' + ds(somme[k]));
   });
   if (parts.length) h += '<div class="small" style="margin-top:10px;color:var(--ink)">Somme par cause : ' + parts.join(' · ') + '</div>';
+  if (adh) h += '<div class="small" style="margin-top:8px;color:#A55EEA">La perte est répartie également sur tous les secteurs ('
+       + Math.round(adh.moy * 100) + ' % chacun), la ligne et les freinages n\u2019ont pas bougé, et la voiture est plus lente partout. '
+       + 'C\u2019est la signature d\u2019une <b>adhérence différente</b>, pas d\u2019une panne.</div>';
   // la demande de la seance, vue de haut : plus de papillon sans aller plus vite ?
   var gA = 0, gB = 0, nA = 0, nB = 0;
   sa.stats.forEach(function (o) { if (o.gaz != null) { gA += o.gaz; nA++; } });
@@ -979,7 +1112,7 @@ function panneauBascule(id) {
 }
 // [MT2 v2.7] un glissement vers la droite ferme le panneau
 function panneauGestes() {
-  ['panVoitures', 'panPilotes', 'panFiche', 'panCafe', 'reglages'].forEach(function (id) {
+  ['panVoitures', 'panPilotes', 'panFiche', 'panCafe', 'panProfil', 'reglages'].forEach(function (id) {
     var e = document.getElementById(id); if (!e || e.dataset.gestes) return;
     e.dataset.gestes = '1';
     var x0 = null, y0 = 0, pousse = false;
@@ -1008,7 +1141,7 @@ function panneauOuvrir(id) {
 }
 function panneauFermer(id) {
   document.getElementById(id).classList.remove('ouvert');
-  var reste = ['panVoitures', 'panPilotes', 'panFiche', 'panCafe'].some(function (x) { return document.getElementById(x).classList.contains('ouvert'); });
+  var reste = ['panVoitures', 'panPilotes', 'panFiche', 'panCafe', 'panProfil'].some(function (x) { return document.getElementById(x).classList.contains('ouvert'); });
   if (!reste && !document.getElementById('reglages').classList.contains('ouvert'))
     document.getElementById('voileReglages').classList.remove('ouvert');
   rendre(); barreMaj();
@@ -1032,13 +1165,26 @@ function barreMaj() {   // [MT2] la barre dit l'etat : vert connecte, bleu smart
 }
 
 // ---- le panneau des voitures : une carte par voiture, une ligne par seance ----
+// [MT2 v3.0] l'icone de la poubelle, une seule fois
+var ICO_POUB = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" '
+             + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+             + '<path d="M3 6h18M9 6V4h6v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>';
 function panVoituresRendre() {
   var h = '';
   ordreVoitures.forEach(function (mac) {
     var v = voitures[mac], sessions = sessionsDe(v);
-    h += '<div class="card"><div class="row" style="justify-content:space-between">'
-       + '<b>' + v.nom + '</b><span class="small">n° ' + v.num + ' · ' + (v.fw || '?') + '</span></div>'
-       + '<div class="small" style="opacity:.7">' + mac + '</div>';
+    var pr = profilDe(mac);
+    h += '<div class="card"><div class="row" style="justify-content:space-between;flex-wrap:nowrap">'
+       + '<b>' + v.nom + '</b>'
+       + '<span class="row" style="gap:8px;flex-wrap:nowrap"><span class="small">n° ' + v.num + ' · ' + (v.fw || '?') + '</span>'
+       + '<button class="btn poub" title="Effacer cette voiture" aria-label="Effacer cette voiture" '
+       + 'onclick="voitureEffacer(\'' + mac + '\')">' + ICO_POUB + '</button></span></div>'
+       + '<div class="small" style="opacity:.7">' + mac + '</div>'
+       + '<div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">'
+       + (pr.masse ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.masse + ' kg</span>' : '')
+       + (pr.hp ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.hp + ' HP' + (pr.hpRpm ? ' @ ' + pr.hpRpm : '') + '</span>' : '')
+       + (pr.tq ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.tq + ' lb-pi' + (pr.tqRpm ? ' @ ' + pr.tqRpm : '') + '</span>' : '')
+       + '<button class="btn sec" onclick="profilOuvrir(\'' + mac + '\')">Profil</button></div>';
     if (!sessions.length) h += '<div class="small" style="margin-top:6px">Aucune séance reçue.</div>';
     sessions.slice().reverse().forEach(function (sn) {
       var eff = ficheEffective(mac, sn), f = eff.f, r = f ? ficheResume(f) : '';   // [MT2 v0.4]
@@ -1052,6 +1198,59 @@ function panVoituresRendre() {
   });
   if (!ordreVoitures.length) h = '<div class="card small">Aucune voiture. Touche CONNEXION pour recevoir le collecteur.</div>';
   document.getElementById('panVoituresCorps').innerHTML = h;
+}
+// [MT2 v3.0] retire une voiture de la page : tours, traces, fiches, profil, memoire.
+// Le boitier, lui, garde ses tours. Si la voiture emet encore, elle revient toute seule.
+function voitureEffacer(mac) {
+  var v = voitures[mac]; if (!v) return;
+  var nT = Object.keys(v.laps).length;
+  var nF = Object.keys(fiches).filter(function (k) { return k.indexOf(mac + '|') === 0; }).length;
+  var q = 'Effacer ' + v.nom + ' de cette page ?\n\n'
+        + nT + ' tour(s), ' + nF + ' fiche(s) de séance'
+        + (profils[mac] ? ' et son profil' : '') + '.\n'
+        + 'Le boîtier garde ses tours : s\u2019il émet encore, la voiture revient.';
+  if (!confirm(q)) return;
+  delete voitures[mac];
+  var i = ordreVoitures.indexOf(mac); if (i >= 0) ordreVoitures.splice(i, 1);
+  Object.keys(fiches).forEach(function (k) { if (k.indexOf(mac + '|') === 0) delete fiches[k]; });
+  fichesSauver();
+  if (profils[mac]) { delete profils[mac]; profilsSauver(); }
+  delete dbVoituresSales[mac];
+  Object.keys(dbSales).forEach(function (k) { if (k.indexOf(mac + '|') === 0) delete dbSales[k]; });
+  dbEffacerVoitureTout(mac);
+  if (vueMac === mac) { vueMac = ordreVoitures[0] || null; vueTour = null; }
+  if (cafeMac === mac) { cafeMac = null; cafeA = cafeB = null; }
+  jrn('Voiture effacée de la page : ' + v.nom + ' (' + mac + ').');
+  panVoituresRendre(); rendre(); memoireEtat();
+}
+// [MT2 v2.9] le profil d'une voiture : ce qui ne change pas d'une seance a l'autre
+var profilMac = null;
+function profilOuvrir(mac) {
+  profilMac = mac;
+  var v = voitures[mac], pr = profilDe(mac);
+  function ch(id, lab, val, unite) {
+    return '<div class="ch"><label>' + lab + (unite ? ' (' + unite + ')' : '') + '</label>'
+         + '<input id="pf_' + id + '" inputmode="decimal" value="' + (val == null ? '' : String(val).replace(/"/g, '&quot;')) + '"></div>';
+  }
+  document.getElementById('profilTitre').textContent = v ? v.nom : mac;
+  document.getElementById('profilCorps').innerHTML =
+      '<div class="card"><b>Masse</b><div class="g2" style="margin-top:8px">'
+    + ch('masse', 'Voiture, sans pilote', pr.masse, 'kg') + '</div></div>'
+    + '<div class="card"><b>Moteur</b><div class="g2" style="margin-top:8px">'
+    + ch('hp', 'Puissance', pr.hp, 'HP') + ch('hpRpm', 'à quel régime', pr.hpRpm, 'tr/min')
+    + ch('tq', 'Couple', pr.tq, 'lb-pi') + ch('tqRpm', 'à quel régime', pr.tqRpm, 'tr/min') + '</div>'
+    + '<div class="small aide" style="opacity:.7">Ces valeurs servent au Coffee break : masse en piste, rapport masse sur puissance, et ce qu\u2019une perte de puissance peut expliquer.</div></div>';
+  document.getElementById('panProfil').classList.add('ouvert');
+  document.getElementById('voileReglages').classList.add('ouvert');
+}
+function profilEnregistrer() {
+  if (!profilMac) return;
+  var o = {};
+  ['masse', 'hp', 'hpRpm', 'tq', 'tqRpm'].forEach(function (k) {
+    var e = document.getElementById('pf_' + k); if (e && e.value.trim()) o[k] = e.value.trim();
+  });
+  if (Object.keys(o).length) profils[profilMac] = o; else delete profils[profilMac];
+  profilsSauver(); panneauFermer('panProfil'); panVoituresRendre();
 }
 function ficheResume(f) {
   var out = [];
@@ -1075,8 +1274,8 @@ function ficheOuvrir(mac, jour, cle) {
     return '<div class="ch"><label>' + lab + (unite ? ' (' + unite + ')' : '') + '</label>'
          + '<input id="fi_' + id + '" value="' + (val == null ? '' : String(val).replace(/"/g, '&quot;')) + '"></div>';
   }
-  var opts = ['<option value="">—</option>'].concat(pilotes.map(function (p) {
-    return '<option' + (f.pilote === p ? ' selected' : '') + '>' + p + '</option>';
+  var opts = ['<option value="">—</option>'].concat(pilotes.map(function (p2) {
+    return '<option' + (f.pilote === p2.nom ? ' selected' : '') + '>' + p2.nom + '</option>';
   })).join('');
   // [MT2 v0.5] une seule ligne dit la reprise : la page reste maigre
   var h = (eff.herite ? '<div class="small" style="margin:0 2px 8px;color:var(--accent)">↩ repris de la '
@@ -1127,10 +1326,13 @@ function panPilotesRendre() {
   var h = '<div class="card"><div class="row">'
         + '<input id="pilNeuf" placeholder="Nom du pilote" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit">'
         + '<button class="btn" onclick="piloteAjouter()">Ajouter</button></div></div>';
-  h += pilotes.length ? pilotes.map(function (p, i) {
-    return '<div class="card"><div class="row" style="justify-content:space-between"><b>' + p + '</b>'
-         + '<button class="btn sec" onclick="piloteRetirer(' + i + ')">Retirer</button></div>'
-         + '<div class="small" style="opacity:.7;margin-top:4px">' + piloteSeances(p) + '</div></div>';
+  h += pilotes.length ? pilotes.map(function (p2, i) {
+    return '<div class="card"><div class="row" style="justify-content:space-between"><b>' + p2.nom + '</b>'
+         + '<button class="btn poub" title="Effacer ce pilote" aria-label="Effacer ce pilote" '
+         + 'onclick="piloteRetirer(' + i + ')">' + ICO_POUB + '</button></div>'
+         + '<div class="ch" style="margin-top:8px"><label>Poids (kg)</label>'
+         + '<input inputmode="decimal" value="' + (p2.poids || '') + '" onchange="pilotePoids(' + i + ', this.value)"></div>'
+         + '<div class="small" style="opacity:.7">' + piloteSeances(p2.nom) + '</div></div>';
   }).join('') : '<div class="card small">Aucun pilote. Ajoute-les ici, puis choisis-en un dans chaque fiche de séance.</div>';
   document.getElementById('panPilotesCorps').innerHTML = h;
 }
@@ -1140,10 +1342,20 @@ function piloteSeances(nom) {
 }
 function piloteAjouter() {
   var e = document.getElementById('pilNeuf'), nom = e.value.trim();
-  if (!nom || pilotes.indexOf(nom) >= 0) return;
-  pilotes.push(nom); pilotesSauver(); e.value = ''; panPilotesRendre();
+  if (!nom || piloteDe(nom)) return;
+  pilotes.push({ nom: nom }); pilotesSauver(); e.value = ''; panPilotesRendre();
 }
-function piloteRetirer(i) { pilotes.splice(i, 1); pilotesSauver(); panPilotesRendre(); }
+// [MT2 v3.0] confirmation, et la question dit combien de seances portent son nom
+function piloteRetirer(i) {
+  var p2 = pilotes[i]; if (!p2) return;
+  var n = 0; Object.keys(fiches).forEach(function (k) { if (fiches[k].pilote === p2.nom) n++; });
+  var q = 'Effacer le pilote ' + p2.nom + ' ?';
+  if (n) q += '\n\n' + n + ' séance(s) portent son nom. Leur fiche garde le nom écrit.';
+  if (!confirm(q)) return;
+  pilotes.splice(i, 1); pilotesSauver(); panPilotesRendre();
+  jrn('Pilote effacé : ' + p2.nom + '.');
+}
+function pilotePoids(i, val) { if (pilotes[i]) { pilotes[i].poids = val.trim(); pilotesSauver(); } }
 var vueTour = null;       // le tour affiche
 var device = null, cmdChar = null, dataChar = null, connecte = false;
 var satVoulu = false, satImg = null, satCle = '';
@@ -2028,6 +2240,14 @@ function dbEffacerVoiture(mac) {
   if (!db) return; var tx = db.transaction('tours', 'readwrite'), st = tx.objectStore('tours');
   st.delete(IDBKeyRange.bound(mac + '|', mac + '|\uffff'));
 }
+// [MT2 v3.0] les tours ET la fiche d'identite de la voiture
+function dbEffacerVoitureTout(mac) {
+  if (!db) { try { localStorage.removeItem('mt_voitures'); } catch (e) {} return; }
+  var tx = db.transaction(['voitures', 'tours'], 'readwrite');
+  tx.objectStore('tours').delete(IDBKeyRange.bound(mac + '|', mac + '|\uffff'));
+  tx.objectStore('voitures').delete(mac);
+  tx.onerror = function () { jrn('\u26a0 Effacement refusé : ' + (tx.error && tx.error.name)); };
+}
 function dbLireTout() {
   return new Promise(function (res) {
     var tx = db.transaction(['voitures', 'tours'], 'readonly'), vs = [], ts = [];
@@ -2062,7 +2282,7 @@ function sauvegarder() {
   var d = new Date(), h = d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '_' + ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2);
   var blob = new Blob([JSON.stringify({ format: 'tracklogics-mt', version: PAGE_VER, date: d.toISOString(),
     ordre: ordreVoitures, voitures: voitures,
-    fiches: fiches, pilotes: pilotes })], { type: 'application/json' });   // [MT2 v1.1] le carnet part avec les tours
+    fiches: fiches, pilotes: pilotes, profils: profils })], { type: 'application/json' });   // [MT2 v1.1] le carnet part avec les tours
   var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tracklogics_sauvegarde_' + h + '.json'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
   jrn('Sauvegarde ecrite : ' + a.download + ' (' + Math.round(blob.size / 1024) + ' ko, '
     + Object.keys(fiches).length + ' fiche(s), ' + pilotes.length + ' pilote(s))');
@@ -2075,13 +2295,20 @@ function restaurer(fichier) {
       var ajoutes = 0;
       Object.keys(s.voitures).forEach(function (m) {
         var src = s.voitures[m]; if (!voitures[m]) { voitures[m] = { mac: m, nom: src.nom, num: src.num, fw: src.fw, vuMs: 0, idx: null, laps: {}, traces: {} }; ordreVoitures.push(m); }
+        else if (src.nom && voitures[m].nom !== src.nom) {   // [MT2 v3.0] le nom du fichier gagne
+          voitures[m].nom = src.nom; if (src.num) voitures[m].num = src.num; if (src.fw) voitures[m].fw = src.fw;
+        }
         var v = voitures[m];
         Object.keys(src.laps || {}).forEach(function (n) { if (!v.laps[n]) { v.laps[n] = src.laps[n]; ajoutes++; } if (!v.traces[n] && src.traces && src.traces[n]) v.traces[n] = src.traces[n]; marquer(m, +n); });
         marquer(m, null);
       });
       var fichesRep = 0, pilotesRep = 0;   // [MT2 v1.1] le carnet revient, sans ecraser ce qui est la
       if (s.fiches) Object.keys(s.fiches).forEach(function (k) { if (!fiches[k]) { fiches[k] = s.fiches[k]; fichesRep++; } });
-      if (s.pilotes) s.pilotes.forEach(function (nm) { if (pilotes.indexOf(nm) < 0) { pilotes.push(nm); pilotesRep++; } });
+      if (s.pilotes) s.pilotes.forEach(function (nm) {
+        var o = typeof nm === 'string' ? { nom: nm } : nm;
+        if (!piloteDe(o.nom)) { pilotes.push(o); pilotesRep++; }
+      });
+      if (s.profils) { Object.keys(s.profils).forEach(function (k) { if (!profils[k]) profils[k] = s.profils[k]; }); profilsSauver(); }
       if (fichesRep) fichesSauver();
       if (pilotesRep) pilotesSauver();
       if (fichesRep || pilotesRep) jrn('Restauration : ' + fichesRep + ' fiche(s) et ' + pilotesRep + ' pilote(s) ajoutes');
