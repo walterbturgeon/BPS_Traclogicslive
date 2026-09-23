@@ -332,6 +332,7 @@
     <span class="small" id="themeNom"></span></div>
 <div class="card" style="margin:0 0 10px">
   <div class="row"><button class="btn sec" id="btnDetails" onclick="detailsBascule()">Détails</button><span class="small">Numéros de série (MAC) et versions des boîtes.</span></div>
+  <div class="row" style="margin-top:8px"><button class="btn sec" onclick="demoCharger()">Démonstration</button><span class="small aide" style="opacity:.75">Des tours d'exemple, sans voiture ni collecteur.</span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="sauvegarder()">Sauvegarder (fichier)</button><button class="btn sec" onclick="document.getElementById('fichierRestaure').click()">Restaurer</button><input type="file" id="fichierRestaure" accept=".json,application/json" style="display:none" onchange="restaurer(this.files[0]); this.value=''"></div>
   <div class="small" id="memEtat" style="margin-top:6px"></div>
 </div>
@@ -442,7 +443,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v2.5';
+var PAGE_VER = 'TRACLOGICS v2.6';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -2013,6 +2014,20 @@ function memoireEtat() {
   var txt = (db ? 'IndexedDB' : 'localStorage (secours)') + ' · ' + n + ' tour' + (n > 1 ? 's' : '') + ' · ' + Object.keys(voitures).length + ' voiture' + (Object.keys(voitures).length > 1 ? 's' : '');
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(function (q) { var p2 = navigator.storage.persisted ? navigator.storage.persisted() : Promise.resolve(false); p2.then(function (ok) { e.textContent = txt + ' · ' + (q.usage / 1048576).toFixed(1) + ' Mo utilises sur ' + Math.round(q.quota / 1048576) + ' · ' + (ok ? 'persistante (le navigateur ne l\u2019efface pas)' : 'au mieux : installe la page sur l\u2019ecran d\u2019accueil pour la rendre persistante'); }); });
   else e.textContent = txt;
+}
+// [MT2 v2.6] charge les tours d'exemple poses a cote de la page
+function demoCharger() {
+  var b = event && event.target; if (b) { b.disabled = true; b.textContent = 'Chargement...'; }
+  fetch('_demo.json').then(function (r) { if (!r.ok) throw new Error('fichier ' + r.status); return r.text(); })
+    .then(function (t) {
+      restaurer(new File([t], '_demo.json', { type: 'application/json' }));
+      if (b) { b.disabled = false; b.textContent = 'Démonstration'; }
+    })
+    .catch(function (e) {
+      if (b) { b.disabled = false; b.textContent = 'Démonstration'; }
+      jrn('Démonstration non chargée : ' + e.message);
+      alert('Le fichier de démonstration n\u2019a pas pu être lu (' + e.message + ').');
+    });
 }
 function sauvegarder() {
   var d = new Date(), h = d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '_' + ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2);
