@@ -173,9 +173,8 @@
   header h1, header .titre, header b { letter-spacing:.14em; text-transform:uppercase; font-weight:800; }
   .ver { color:var(--muted); font-size:.72em; letter-spacing:.06em; text-transform:uppercase; }
   /* [MT2 v3.4] le fondu du pourtour : mode clair seulement */
-  /* [MT2 v3.8] le fondu se pilote par trois variables, posees en JS */
-  .vignette { position:fixed; inset:0; pointer-events:none; z-index:60; display:none;
-              box-shadow:inset 0 0 var(--vigFlou,60px) var(--vigEtal,6px) rgba(0,0,0,var(--vigNoir,0)); }
+  /* [MT2 v3.9] quatre degrades de bord, poses en JS : francs au bord, nuls au centre */
+  .vignette { position:fixed; inset:0; pointer-events:none; z-index:60; display:none; }
   .vignette.allume { display:block; }
   .fige { background:var(--bg); box-shadow:0 6px 18px rgba(0,0,0,.45); }
   :root[data-theme="light"] .fige { box-shadow:0 6px 18px rgba(0,0,0,.12); }
@@ -492,7 +491,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v3.8';
+var PAGE_VER = 'TRACLOGICS v3.9';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -2742,10 +2741,19 @@ function bordsPoser(val) {
 function bordsMaj() {
   var v = document.querySelector('.vignette'); if (!v) return;
   var u = bordsN / 100;
-  var r = document.documentElement.style;
-  r.setProperty('--vigFlou', Math.round(40 + 300 * u) + 'px');
-  r.setProperty('--vigEtal', Math.round(4 + 80 * u) + 'px');
-  r.setProperty('--vigNoir', (0.72 * u).toFixed(3));
+  var L = Math.round(30 + 90 * u), A = 0.85 * u;
+  // la courbe : franche au bord, presque eteinte a la moitie de la bande
+  function bande(vers, cote) {
+    var g = 'linear-gradient(to ' + vers + ','
+          + ' rgba(0,0,0,' + A.toFixed(3) + ') 0,'
+          + ' rgba(0,0,0,' + (A * 0.42).toFixed(3) + ') 22%,'
+          + ' rgba(0,0,0,' + (A * 0.12).toFixed(3) + ') 50%,'
+          + ' rgba(0,0,0,0) 100%)';
+    var taille = (vers === 'right' || vers === 'left') ? L + 'px 100%' : '100% ' + L + 'px';
+    return g + ' ' + cote + ' / ' + taille + ' no-repeat';
+  }
+  v.style.background = [bande('right', 'left'), bande('left', 'right'),
+                        bande('bottom', 'top'), bande('top', 'bottom')].join(', ');
   v.classList.toggle('allume', bordsN > 0);
   var c = document.getElementById('curBords'); if (c && +c.value !== bordsN) c.value = bordsN;
   var n = document.getElementById('bordsNote');
