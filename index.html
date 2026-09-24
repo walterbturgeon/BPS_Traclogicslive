@@ -482,7 +482,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v4.4';
+var PAGE_VER = 'TRACLOGICS v4.5';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1267,12 +1267,16 @@ function panneauOuvrir(id) {
   document.getElementById('voileReglages').classList.add('ouvert');
   barreMaj();
 }
+// [MT2 v4.5] la page est sale quand une donnee affichee a change
+var pageSale = false;
+function salir() { pageSale = true; }
 function panneauFermer(id) {
   document.getElementById(id).classList.remove('ouvert');
   var reste = ['panVoitures', 'panPilotes', 'panFiche', 'panCafe', 'panProfil'].some(function (x) { return document.getElementById(x).classList.contains('ouvert'); });
   if (!reste && !document.getElementById('reglages').classList.contains('ouvert'))
     document.getElementById('voileReglages').classList.remove('ouvert');
-  rendre(); barreMaj();
+  if (pageSale) { pageSale = false; rendre(); }   // [MT2 v4.5] seulement si quelque chose a bouge
+  barreMaj();
 }
 function barreMaj() {   // [MT2] la barre dit l'etat : vert connecte, bleu smart, orange panneau ouvert
   {   // [MT2 v0.2] le panneau ouvert porte le trait orange, comme l'onglet actif de RACELOG
@@ -1472,7 +1476,7 @@ function ficheEnregistrer() {
   var pl = document.getElementById('fi_pilote'); if (pl && pl.value) f.pilote = pl.value;
   var nt = document.getElementById('fi_notes'); if (nt && nt.value.trim()) f.notes = nt.value.trim();
   if (Object.keys(f).length) fiches[ficheEnCours.cle] = f; else delete fiches[ficheEnCours.cle];
-  fichesSauver();
+  fichesSauver(); salir();   // [MT2 v4.5] la masse, le pilote et le reste nourrissent l affichage
   jrn('Fiche de séance enregistrée : ' + ficheEnCours.cle);
   panneauFermer('panFiche');
   panVoituresRendre();
@@ -1500,7 +1504,7 @@ function piloteSeances(nom) {
 function piloteAjouter() {
   var e = document.getElementById('pilNeuf'), nom = e.value.trim();
   if (!nom || piloteDe(nom)) return;
-  pilotes.push({ nom: nom }); pilotesSauver(); e.value = ''; panPilotesRendre();
+  pilotes.push({ nom: nom }); pilotesSauver(); salir(); e.value = ''; panPilotesRendre();
 }
 // [MT2 v3.0] confirmation, et la question dit combien de seances portent son nom
 function piloteRetirer(i) {
@@ -1509,10 +1513,10 @@ function piloteRetirer(i) {
   var q = 'Effacer le pilote ' + p2.nom + ' ?';
   if (n) q += '\n\n' + n + ' séance(s) portent son nom. Leur fiche garde le nom écrit.';
   if (!confirm(q)) return;
-  pilotes.splice(i, 1); pilotesSauver(); panPilotesRendre();
+  pilotes.splice(i, 1); pilotesSauver(); salir(); panPilotesRendre();
   jrn('Pilote effacé : ' + p2.nom + '.');
 }
-function pilotePoids(i, val) { if (pilotes[i]) { pilotes[i].poids = val.trim(); pilotesSauver(); } }
+function pilotePoids(i, val) { if (pilotes[i]) { pilotes[i].poids = val.trim(); pilotesSauver(); salir(); } }
 var vueTour = null;       // le tour affiche
 var device = null, cmdChar = null, dataChar = null, connecte = false;
 var satVoulu = false, satImg = null, satCle = '';
@@ -3023,7 +3027,9 @@ function dessiner(v, lap) {
 }
 function satBascule() {
   satVoulu = document.getElementById('satOn').checked;
-  if (!satVoulu) { satImg = null; satCle = ''; document.getElementById('satEtat').textContent = ''; }   // [v68]
+  // [MT2 v4.5] on GARDE l image : la case decochee ne la dessine pas, mais la recocher
+  // ne doit pas la retelecharger. Seule une couche differente la rend inutile (voir satCouche).
+  if (!satVoulu) { document.getElementById('satEtat').textContent = ''; }
   try { localStorage.setItem('mt_sat', satVoulu ? '1' : '0'); } catch (e) {}
   rendre();
 }
