@@ -209,6 +209,10 @@
   tr.clic.sel { background:rgba(255,90,31,.12); }
   /* la meteo et la densite en bleu, le record en ambre */
   #tMeteo { color:var(--bleu); }
+  /* [MT2 v4.8] la meteo sur une seule ligne, toute la largeur */
+  #meteoCase.etale { grid-column:1 / -1; }
+  #meteoCase.etale > .small:first-child { display:inline; margin-right:10px; }
+  #meteoCase.etale > #tMeteo { display:inline; font-size:1.15em; }
   .bande { border-radius:999px; font-weight:700; letter-spacing:.02em; }
   /* la barre du bas, dessinee comme celle de RACELOG */
   #barbas { background:var(--card); border-top:1px solid var(--line); padding:0 2px calc(4px + env(safe-area-inset-bottom)); }
@@ -482,7 +486,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v4.7';
+var PAGE_VER = 'TRACLOGICS v4.8';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -2682,6 +2686,7 @@ function rendre0() {
     lap._mac = v.mac; meteoCollerAuTour(lap, mt);   // [v39] un tour frais garde sa meteo
   }
   mc.style.display = (mt && !smartOn) ? '' : 'none';   // [v71] en smart, la meteo sert au tri des tours, elle ne s'affiche plus
+  mc.classList.add('etale');   // [MT2 v4.8] une ligne, pleine largeur : trois fois moins haute
   if (mt) {
     document.getElementById('tMeteo').textContent = Math.round(mt.degres) + ' °C · H2O ' + mt.pluie.toFixed(1).replace('.', ',') + ' mm/h';
     // [v38] une seule ligne : le chiffre parle, rien dessous
