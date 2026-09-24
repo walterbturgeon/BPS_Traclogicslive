@@ -455,7 +455,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v3.0';
+var PAGE_VER = 'TRACLOGICS v3.1';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -595,6 +595,31 @@ pilotes = pilotes.map(function (x) { return typeof x === 'string' ? { nom: x } :
 try { profils = JSON.parse(localStorage.getItem('mt2_profils') || '{}'); } catch (e) { profils = {}; }
 function profilsSauver() { try { localStorage.setItem('mt2_profils', JSON.stringify(profils)); } catch (e) {} }
 function profilDe(mac) { return profils[mac] || {}; }
+// [MT2 v3.1] valeurs par defaut : un moteur atmospherique au niveau de la mer, une carrosserie ordinaire
+var MAP_REF_DEFAUT = 101.3, CDA_DEFAUT = 0.70, MAP_PERTE = 25;   // MAP_PERTE : frottement et pompage, en kPa
+function mapRefDe(pr) { var x = parseFloat(pr && pr.mapRef); return isFinite(x) && x > 30 ? x : MAP_REF_DEFAUT; }
+function cdaDe(pr) { var x = parseFloat(pr && pr.cda); return isFinite(x) && x > 0.2 && x < 2 ? x : CDA_DEFAUT; }
+// le couple que la voiture peut donner a la pression VUE, d apres celui du banc
+function coupleDuJour(pr, mapVu) {
+  var tq = parseFloat(pr && pr.tq), mr = mapRefDe(pr);
+  if (!isFinite(tq) || !isFinite(mapVu) || mapVu <= MAP_PERTE || mr <= MAP_PERTE) return null;
+  if (mapVu > mr * 1.05) return null;   // la piste depasse le banc : le champ est faux
+  return tq * (mapVu - MAP_PERTE) / (mr - MAP_PERTE);
+}
+// la pression vue depasse-t-elle celle du banc ? alors le champ n'a pas ete rempli
+function mapRefDouteux(pr, mapVu) { return isFinite(mapVu) && mapVu > mapRefDe(pr) * 1.05; }
+// la puissance qui part dans l air et dans les pneus, en HP, a une vitesse donnee
+function resistanceHP(cda, masse, kmh) {
+  var v = kmh / 3.6;
+  if (!(v > 1) || !(masse > 0)) return 0;
+  return (0.5 * 1.18 * cda * v * v * v + 0.015 * masse * 9.80665 * v) / 745.7;
+}
+// ce qu un couple plus faible coute en secondes. Sur une meme plage de vitesse l energie
+// a fournir ne change pas : t = E / (P - R). Donc perte = t x (Pfort - Pfaible) / (Pfort - R).
+function perteCouple(hpFort, hpFaible, hpRes, tPleinGaz) {
+  if (!(hpFort > hpFaible) || !(tPleinGaz > 0) || !(hpFort > hpRes)) return null;
+  return tPleinGaz * (hpFort - hpFaible) / (hpFort - hpRes);
+}
 function piloteDe(nom) { for (var i = 0; i < pilotes.length; i++) if (pilotes[i].nom === nom) return pilotes[i]; return null; }
 // [MT2 v2.9] la masse en piste : voiture + pilote de la seance
 function masseDe(mac, sn) {
@@ -670,6 +695,21 @@ function cafeStats(v, sn) {
   }
   return out;
 }
+// [MT2 v3.1] ce qu une seance a vu a pleine charge TENUE, tire du meilleur tour
+function cafePleinGaz(v, st) {
+  if (!st || !st.stats || !st.bestLap) return null;
+  var tr = v.traces[st.bestLap.num], pas = ((tr && tr.intervalMs) || 500) / 1000;
+  var maps = [], rpms = [], vits = [], n = 0;
+  st.stats.forEach(function (o) {
+    if (!o || !o.nP || o.mapPlein == null) return;
+    maps.push(o.mapPlein); n += o.nP;
+    if (o.rpmPlein) rpms.push(o.rpmPlein);
+    if (o.vMoy != null) vits.push(o.vMoy);
+  });
+  if (maps.length < 2) return null;
+  return { map: mediane(maps), rpm: rpms.length ? mediane(rpms) : null,
+           kmh: vits.length ? mediane(vits) : null, tGaz: n * pas, n: n };
+}
 function cafeDiffFiche(fa, fb) {
   var noms = { pilote: 'Pilote', pneuModele: 'Modèle de pneu', pneuTaille: 'Grandeur de pneu',
     psiAvG: 'Pression av. G', psiAvD: 'Pression av. D', psiArG: 'Pression ar. G', psiArD: 'Pression ar. D',
@@ -734,6 +774,46 @@ function cafeRendre() {
         h += '<div class="small" style="margin-top:6px;color:var(--accent)">\u26a0 ' + Math.round(Math.abs(mB.total - mA.total))
            + ' kg d\u2019écart entre les deux séances : une partie du temps vient de là.</div>';
       h += '</div>';
+    }
+  }
+  {   // [MT2 v3.1] le couple que la pression du jour permet
+    var pgA = cafePleinGaz(v, sa), pgB = cafePleinGaz(v, sb), pr3 = profilDe(mac);
+    if (pgA && pgB && pr3.tq) {
+      var cjA = coupleDuJour(pr3, pgA.map), cjB = coupleDuJour(pr3, pgB.map);
+      if (!cjA && !cjB && mapRefDouteux(pr3, Math.max(pgA.map, pgB.map))) {
+        h += '<div class="card"><b>Le couple du jour</b><div class="small" style="margin-top:6px;color:var(--warn)">\u26a0 '
+           + 'La piste voit ' + Math.round(Math.max(pgA.map, pgB.map)) + ' kPa, le profil annonce un banc à '
+           + String(mapRefDe(pr3)).replace('.', ',') + ' kPa. Une des deux valeurs est fausse : remplis « MAP au banc » '
+           + 'dans le profil de la voiture. Tant qu\u2019il est faux, la page ne calcule rien.</div></div>';
+      } else if (cjA && cjB) {
+        var hpA = cjA * (pgA.rpm || 6000) / 5252, hpB = cjB * (pgB.rpm || 6000) / 5252;
+        var mRef = (mA && mA.total) || (mB && mB.total) || parseFloat(pr3.masse) || 0;
+        var kmh = (pgA.kmh && pgB.kmh) ? (pgA.kmh + pgB.kmh) / 2 : (pgA.kmh || pgB.kmh || 0);
+        var res = resistanceHP(cdaDe(pr3), mRef, kmh);
+        var ecartPct = 100 * (cjB - cjA) / cjA;
+        var n1 = function (x, u) { return x == null ? '—' : x.toFixed(x < 100 ? 1 : 0).replace('.', ',') + ' ' + u; };
+        h += '<div class="card"><b>Le couple du jour</b>'
+           + '<div class="small aide" style="opacity:.7;margin:4px 0 8px">Le banc a mesuré ' + pr3.tq + ' lb-pi à '
+           + String(mapRefDe(pr3)).replace('.', ',') + ' kPa. Voici ce que la pression vue en piste permet.</div>'
+           + '<table><tr><th>Mesure</th><th>A</th><th>B</th></tr>'
+           + '<tr><td>MAP à plein gaz</td><td class="num">' + n1(pgA.map, 'kPa') + '</td><td class="num">' + n1(pgB.map, 'kPa') + '</td></tr>'
+           + '<tr><td>Couple permis</td><td class="num">' + n1(cjA, 'lb-pi') + '</td><td class="num">' + n1(cjB, 'lb-pi') + '</td></tr>'
+           + '<tr><td>Temps à plein gaz</td><td class="num">' + n1(pgA.tGaz, 's') + '</td><td class="num">' + n1(pgB.tGaz, 's') + '</td></tr>'
+           + '</table>';
+        if (Math.abs(ecartPct) >= 5) {
+          var perte = (ecartPct < 0) ? perteCouple(hpA, hpB, res, pgB.tGaz) : perteCouple(hpB, hpA, res, pgA.tGaz);
+          h += '<div class="small" style="margin-top:8px;color:' + (ecartPct < 0 ? 'var(--warn)' : 'var(--ok)') + '">\u26a0 '
+             + (ecartPct < 0 ? 'B' : 'A') + ' a ' + Math.abs(ecartPct).toFixed(1).replace('.', ',') + ' % de couple en moins'
+             + (perte ? ' : environ ' + perte.toFixed(2).replace('.', ',') + ' s par tour' : '') + '.</div>';
+        } else {
+          h += '<div class="small" style="margin-top:8px;opacity:.75">Même couple des deux côtés à '
+             + Math.abs(ecartPct).toFixed(1).replace('.', ',') + ' % près. Sous 5 %, la mesure ne tranche pas.</div>';
+        }
+        h += '</div>';
+      }
+    } else if (pr3.tq && (!pgA || !pgB)) {
+      h += '<div class="card aide"><b>Le couple du jour</b><div class="small" style="margin-top:6px;opacity:.7">'
+         + 'Il faut les voies MAP et papillon dans les canaux pour ce calcul. Sans elles, pas de verdict.</div></div>';
     }
   }
   h += '<div class="card"><b>Chrono</b><table style="margin-top:8px"><tr><th>Mesure</th><th>A</th><th>B</th><th>Écart</th></tr>'
@@ -1183,7 +1263,8 @@ function panVoituresRendre() {
        + '<div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">'
        + (pr.masse ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.masse + ' kg</span>' : '')
        + (pr.hp ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.hp + ' HP' + (pr.hpRpm ? ' @ ' + pr.hpRpm : '') + '</span>' : '')
-       + (pr.tq ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.tq + ' lb-pi' + (pr.tqRpm ? ' @ ' + pr.tqRpm : '') + '</span>' : '')
+       + (pr.tq ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.tq + ' lb-pi' + (pr.tqRpm ? ' @ ' + pr.tqRpm : '')
+                + (mapRefDe(pr) > 110 ? ' @ ' + mapRefDe(pr) + ' kPa' : '') + '</span>' : '')
        + '<button class="btn sec" onclick="profilOuvrir(\'' + mac + '\')">Profil</button></div>';
     if (!sessions.length) h += '<div class="small" style="margin-top:6px">Aucune séance reçue.</div>';
     sessions.slice().reverse().forEach(function (sn) {
@@ -1238,7 +1319,12 @@ function profilOuvrir(mac) {
     + ch('masse', 'Voiture, sans pilote', pr.masse, 'kg') + '</div></div>'
     + '<div class="card"><b>Moteur</b><div class="g2" style="margin-top:8px">'
     + ch('hp', 'Puissance', pr.hp, 'HP') + ch('hpRpm', 'à quel régime', pr.hpRpm, 'tr/min')
-    + ch('tq', 'Couple', pr.tq, 'lb-pi') + ch('tqRpm', 'à quel régime', pr.tqRpm, 'tr/min') + '</div>'
+    + ch('tq', 'Couple', pr.tq, 'lb-pi') + ch('tqRpm', 'à quel régime', pr.tqRpm, 'tr/min')
+    + ch('mapRef', 'MAP au banc', pr.mapRef, 'kPa') + '</div>'
+    + '<div class="small aide" style="opacity:.7">MAP au banc : la pression d\u2019admission pendant la mesure. 101,3 kPa pour un moteur atmosphérique ; la pression de suralimentation pour un turbo. Elle sert à ramener le couple du banc à la pression vue en piste.</div></div>'
+    + '<div class="card"><b>Aérodynamique</b><div class="g2" style="margin-top:8px">'
+    + ch('cda', 'Traînée (CdA)', pr.cda) + '</div>'
+    + '<div class="small aide" style="opacity:.7">Coefficient de traînée multiplié par la surface frontale, en m². 0,70 va pour une berline de piste ; 0,60 pour un coupé bas, 0,90 pour une voiture à gros aileron.</div></div>'
     + '<div class="small aide" style="opacity:.7">Ces valeurs servent au Coffee break : masse en piste, rapport masse sur puissance, et ce qu\u2019une perte de puissance peut expliquer.</div></div>';
   document.getElementById('panProfil').classList.add('ouvert');
   document.getElementById('voileReglages').classList.add('ouvert');
@@ -1246,7 +1332,7 @@ function profilOuvrir(mac) {
 function profilEnregistrer() {
   if (!profilMac) return;
   var o = {};
-  ['masse', 'hp', 'hpRpm', 'tq', 'tqRpm'].forEach(function (k) {
+  ['masse', 'hp', 'hpRpm', 'tq', 'tqRpm', 'mapRef', 'cda'].forEach(function (k) {
     var e = document.getElementById('pf_' + k); if (e && e.value.trim()) o[k] = e.value.trim();
   });
   if (Object.keys(o).length) profils[profilMac] = o; else delete profils[profilMac];
