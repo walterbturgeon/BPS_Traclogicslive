@@ -498,7 +498,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.3';
+var PAGE_VER = 'TRACLOGICS v5.4';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1948,6 +1948,9 @@ function decodeCatalogue(v, b) {
   if (part === 0 && b.length >= 158) {   // [v21] PT2.1.39 : UTC de la session, du debut et de la fin du tour, motif
     var su = dv.getUint32(145, true), du = dv.getUint32(149, true), fu = dv.getUint32(153, true);
     if (su) lap.sessionUtc = su; if (du) lap.debutUtc = du; if (fu) lap.finUtc = fu; lap.motif = b[157];
+    // [MT2 v5.4] l heure de la seance arrive ici : c est le moment de verifier la bande
+    var nv = numSelonSession(v, lap);
+    if (nv !== num) { v.laps[num] = lap; deplacerTour(v, num, nv); num = nv; }
   }
   lap.cat = cat; v.laps[num] = lap;
   if (!v.cats) v.cats = {};
@@ -2916,8 +2919,97 @@ function lapSessionCle(l) { return l.num >= 200 ? 's' + Math.floor(l.num / 200) 
 function lapInstantMs(l) { return l.debutUtc ? l.debutUtc * 1000 : (l.recuMs || 0); }
 function jourTexte(ms) { var d = new Date(ms); return d.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
 function heureTexte(ms) { var d = new Date(ms); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+// [MT2 v5.4] L'HEURE D'UN TOUR. L'UTC du boitier d'abord ; sinon le temps reconstruit a
+// partir des durees, marque d'un « ~ » pour qu'il ne passe pas pour une mesure ; sinon
+// seulement, l'heure de RECEPTION, qui est fausse d'une heure sur un tour rejoue.
+function heureTour(sn, l, i) {
+  if (l.finUtc) return new Date(l.finUtc * 1000).toTimeString().slice(0, 8);
+  if (sn.fins && sn.fins[i]) return '~ ' + new Date(sn.fins[i]).toTimeString().slice(0, 8);
+  if (l.recuMs) return new Date(l.recuMs).toTimeString().slice(0, 8) + ' (re\u00e7u)';
+  return '';
+}
 var MOTIFS = { 1: 'demarrage du kit', 2: 'remise a zero', 3: 'apres un arret', 4: 'changement de site', 5: 'session precedente pleine' };
 // les sessions d'une voiture : [{cle, laps (ordre croissant), debutMs, finMs, jour, best, n}] du plus vieux au plus recent
+// =====================================================================
+// [MT2 v5.4] DEUX SEANCES DANS LA MEME BANDE, ET LES HEURES QUI NE SUIVENT PLUS
+// =====================================================================
+
+// ---- A : LA SEANCE QUI ARRIVE EST-ELLE CELLE DE LA BANDE ? ----
+// ⚠ Le 24 sept. 2026 a 14 h 16, le kit 28 a redemarre et a renumerote sa nouvelle
+// seance a partir de 201. La bande 1 portait deja les tours 204 a 210, roules a
+// 13 h 08. La garde de la v5.3 ne voyait rien : les places 201, 202 et 203 etaient
+// LIBRES, ces tours-la n'etant jamais arrives. Les deux seances se sont melangees et
+// la liste sautait de 13 h 23 a 14 h 20.
+// LE SIGNAL SUR : un tour ne peut pas avoir ete RECU avant que sa seance ne COMMENCE.
+function bandeLibre(v, s0) {
+  var d = sessionDecal[v.mac] || (sessionDecal[v.mac] = {});
+  var pris = {};
+  Object.keys(v.laps).forEach(function (n) { pris[Math.floor(n / 200)] = 1; });
+  Object.keys(d).forEach(function (k) { pris[d[k]] = 1; });
+  var s = s0 + 1; while (pris[s] && s < 320) s++;
+  return s < 320 ? s : null;
+}
+function deplacerTour(v, ancien, nouveau) {
+  if (ancien === nouveau || !v.laps[ancien]) return;
+  var l = v.laps[ancien]; l.num = nouveau;
+  v.laps[nouveau] = l; delete v.laps[ancien];
+  if (v.traces[ancien]) { v.traces[nouveau] = v.traces[ancien]; delete v.traces[ancien]; }
+  marquer(v.mac, ancien); marquer(v.mac, nouveau);
+}
+// rend le numero a utiliser pour ce tour, une fois son heure de seance connue
+function numSelonSession(v, lap) {
+  var su = lap.sessionUtc; if (!su) return lap.num;
+  var s0 = Math.floor(lap.num / 200), t0 = su * 1000, conflit = false;
+  Object.keys(v.laps).forEach(function (n) {
+    var l = v.laps[n];
+    if (l === lap || Math.floor(n / 200) !== s0) return;
+    // une autre seance, a une autre heure de depart
+    if (l.sessionUtc && Math.abs(l.sessionUtc - su) > 60) conflit = true;
+    // ou un tour recu AVANT que cette seance ne commence : impossible
+    if (l.recuMs && l.recuMs < t0 - 60000) conflit = true;
+  });
+  if (!conflit) return lap.num;
+  var s = bandeLibre(v, s0);
+  if (s == null) { jrn('⚠ ' + v.nom + ' : plus de bande de séance libre'); return lap.num; }
+  sessionDecal[v.mac][s0] = s; decalSauver();
+  jrn('⚠ ' + v.nom + ' : la séance qui commence à ' + heureTexte(t0)
+      + ' porte des numéros déjà pris par une séance plus ancienne. Elle est rangée en séance '
+      + s + " — les deux ne sont plus mélangées.");
+  return s * 200 + (lap.num % 200);
+}
+
+// ---- B : L'HEURE D'UNE SEANCE QUI N'A PAS D'UTC ----
+// ⚠ Un tour rejoue porte l'heure de sa RECEPTION, pas celle ou il a roule. Le 24 sept.,
+// les tours 1 a 3 sont arrives a 14 h 20 alors qu'ils avaient roule a 13 h 02 : la seance
+// s'affichait a 14 h 16 et la liste ne suivait plus rien.
+// Les tours d'une seance se suivent SANS TROU : fin(n+1) = fin(n) + duree(n+1). On s'ancre
+// donc sur le tour RECU LE PLUS TOT -- celui qui n'a pas ete rejoue -- et on deroule dans
+// les deux sens. Controle sur la seance du 24 sept. : l'ancre au tour 4 redonne le tour 5
+// a une seconde pres de sa vraie heure de reception.
+function finsReconstruites(laps) {
+  // ⚠ L'ANCRE EST UNE MESURE, PAS UNE RECEPTION. Un finUtc vient du boitier ; un recuMs
+  // porte l'heure du rejeu, en retard de tout le temps ou la tablette etait deconnectee.
+  // On prend donc le premier tour qui porte un finUtc ; a defaut seulement, la reception
+  // la plus ancienne -- celle qui a le plus de chances d'avoir ete prise en direct.
+  var iA = -1, tA = Infinity;
+  for (var i = 0; i < laps.length; i++) if (laps[i].finUtc) { iA = i; tA = laps[i].finUtc * 1000; break; }
+  if (iA < 0) for (var j = 0; j < laps.length; j++) {
+    var r = laps[j].recuMs;
+    if (r && r < tA) { tA = r; iA = j; }
+  }
+  if (iA < 0) return null;
+  var fin = []; fin[iA] = tA;
+  for (var a = iA + 1; a < laps.length; a++) fin[a] = fin[a - 1] + (laps[a].dureeMs || 0);
+  for (var b = iA - 1; b >= 0; b--) fin[b] = fin[b + 1] - (laps[b + 1].dureeMs || 0);
+  // ⚠ ET ON VERIFIE. Un tour ne peut pas avoir ete RECU avant d'avoir FINI. Si la chaine
+  // dit le contraire, c'est que ces tours ne se suivent pas : on rend « rien » plutot
+  // qu'une heure inventee, et la colonne retombe sur l'heure de reception, qui se nomme.
+  for (var c = 0; c < laps.length; c++) {
+    if (laps[c].recuMs && fin[c] > laps[c].recuMs + 60000) return null;
+  }
+  return fin;
+}
+
 function sessionsDe(v) {
   var map = {}, ordre = [];
   lapsTries(v).forEach(function (l) {
@@ -2927,7 +3019,14 @@ function sessionsDe(v) {
   });
   var out = ordre.map(function (k) {
     var sn = map[k], l0 = sn.laps[0], lN = sn.laps[sn.laps.length - 1];
-    sn.debutMs = l0.sessionUtc ? l0.sessionUtc * 1000 : lapInstantMs(l0); sn.finMs = lN.finUtc ? lN.finUtc * 1000 : (lN.recuMs || sn.debutMs);
+    // [MT2 v5.4] sans UTC, on ne prend plus l heure de RECEPTION du premier tour :
+    // un tour rejoue la porte fausse d une heure. On deroule les durees a la place.
+    var fins = finsReconstruites(sn.laps);   // [MT2 v5.4] toujours : les tours en ont besoin
+    sn.debutMs = l0.sessionUtc ? l0.sessionUtc * 1000
+               : (fins ? fins[0] - (l0.dureeMs || 0) : lapInstantMs(l0));
+    sn.finMs = lN.finUtc ? lN.finUtc * 1000
+             : (fins ? fins[fins.length - 1] : (lN.recuMs || sn.debutMs));
+    sn.fins = fins;   // [MT2 v5.4] la colonne Heure s'en sert
     sn.jour = new Date(sn.debutMs).toDateString(); sn.n = sn.laps.length; return sn;
   });
   out.sort(function (a, b) { return a.debutMs - b.debutMs; });
@@ -2941,11 +3040,41 @@ function lapsSession(v, lap) { var sn = sessionDe(v, lap); return sn ? sn.laps :
 function lapsJour(v, lap) { var sn = sessionDe(v, lap), out = []; if (!sn) return lapsTries(v); sessionsDe(v).forEach(function (x) { if (x.jour === sn.jour) out = out.concat(x.laps); }); return out; }
 var sessionsRepliees = {};   // ce que le doigt a replie, garde d'un rendu a l'autre
 // [v54] apres un chargement : chaque session donne son catalogue aux tours qui n'en ont pas
+// ⚠ ET ON REPARE CE QUI EST DEJA RANGE. Le correctif du catalogue ne protege que les tours
+// a venir ; la memoire de l'appareil, elle, porte deja le melange. On la demele au
+// chargement, avec le meme signal : un tour recu AVANT le debut d'une seance n'en fait
+// pas partie. La seance qui commence plus tard part dans une bande libre, avec ses tours
+// suivants tant qu'ils ont ete recus apres son depart.
+function seancesDemeler(v) {
+  var faits = 0;
+  Object.keys(v.laps).map(Number).sort(function (a, b) { return a - b; }).forEach(function (n) {
+    var lap = v.laps[n]; if (!lap || !lap.sessionUtc) return;
+    var s0 = Math.floor(n / 200), t0 = lap.sessionUtc * 1000, avant = false;
+    Object.keys(v.laps).forEach(function (m) {
+      if (Math.floor(+m / 200) !== s0) return;
+      var l = v.laps[m];
+      if (l !== lap && l.recuMs && l.recuMs < t0 - 60000) avant = true;
+    });
+    if (!avant) return;
+    var s = bandeLibre(v, s0); if (s == null) return;
+    // ⚠ ON NE DEPLACE QUE CE TOUR-LA. A 14 h 20 le 24 sept., la passerelle a rejoue les
+    // tours 2 et 3 de la seance de 13 h EN MEME TEMPS que le tour 1 de la nouvelle : les
+    // trois portaient la meme heure de reception. Emporter les numeros suivants les aurait
+    // mis dans la mauvaise seance. Les vrais suivants arriveront avec le decalage.
+    sessionDecal[v.mac] = sessionDecal[v.mac] || {};
+    sessionDecal[v.mac][s0] = s; decalSauver();
+    deplacerTour(v, n, s * 200 + (n % 200)); faits++;
+    jrn('\u26a0 ' + v.nom + ' : le tour #' + (n % 200) + ' d\u2019une s\u00e9ance commenc\u00e9e \u00e0 '
+        + heureTexte(t0) + ' \u00e9tait m\u00eal\u00e9 \u00e0 une s\u00e9ance plus ancienne. Rang\u00e9 en s\u00e9ance ' + s + '.');
+  });
+  return faits;
+}
 function catsRelier() {
   Object.keys(voitures).forEach(function (m) {
     var v = voitures[m]; v.cats = v.cats || {};
     Object.keys(v.laps).forEach(function (n) { var l = v.laps[n]; if (l.cat) v.cats[lapSessionCle(l)] = l.cat; });
     Object.keys(v.laps).forEach(function (n) { var l = v.laps[n]; if (!l.cat && v.cats[lapSessionCle(l)]) l.cat = v.cats[lapSessionCle(l)]; });
+    seancesDemeler(v);   // [MT2 v5.4] deux seances dans une meme bande : on les separe
   });
 }
 function rendre() {   // [v17] la position verticale est gardee : seul le doigt fait defiler
@@ -2994,7 +3123,7 @@ function rendre0() {
             ? '<span style="color:' + (l.dureeMs - sn.best.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(l.dureeMs - sn.best.dureeMs) + '</span>'
             : (l === sn.best ? '<b style="color:var(--ok)">meilleur</b>' : '—')) + '</td>' : '')
         + '<td class="num small">'
-        + (l.finUtc ? new Date(l.finUtc * 1000).toTimeString().slice(0, 8) : l.recuMs ? new Date(l.recuMs).toTimeString().slice(0, 8) + ' (reçu)' : '') + '</td></tr>';
+        + heureTour(sn, l, sn.laps.length - 1 - j) + '</td></tr>';
     });
     hb += '</tbody></table></details>';
   });
