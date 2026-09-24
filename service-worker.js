@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'draglog-mt-';
-const CACHE = PREFIX + 'v97';   // v97 : le fondu devient franc au bord et nul au centre
+const CACHE = PREFIX + 'v99';   // v99 : la voiture entre dans la fiche de seance, trois crans de bords
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg',
                 './circuits_index.csv', './circuits_offsets.csv', '../circuits_index.csv', '../circuits_offsets.csv'];
 

@@ -378,7 +378,7 @@
 <div class="card" style="margin:0 0 10px">
   <div class="row"><button class="btn sec" id="btnDetails" onclick="detailsBascule()">Détails</button><span class="small">Numéros de série (MAC) et versions des boîtes.</span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" id="btnVitCoul" onclick="vitInverseBascule()">Vitesse : rouge = lent</button><span class="small" id="vitCoulNote"></span></div>
-  <div class="row" style="margin-top:8px"><span class="small">Bords</span><input type="range" id="curBords" min="0" max="100" step="5" style="flex:1;min-width:140px" oninput="bordsPoser(this.value)"><span class="small" id="bordsNote" style="min-width:48px"></span></div>
+  <div class="row" style="margin-top:8px"><button class="btn sec" id="btnBords" onclick="bordsSuivant()">Bords : faible</button><span class="small" id="bordsNote"></span></div>
   <div class="small aide" style="opacity:.7;margin-top:4px">Une dalle n’éclaire pas ses bords comme son centre. Monte le cran jusqu’à ce que le défaut de la tienne ne se voie plus.</div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="demoCharger()">Démonstration</button><span class="small aide" style="opacity:.75">Des tours d'exemple, sans voiture ni collecteur.</span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="sauvegarder()">Sauvegarder (fichier)</button><button class="btn sec" onclick="document.getElementById('fichierRestaure').click()">Restaurer</button><input type="file" id="fichierRestaure" accept=".json,application/json" style="display:none" onchange="restaurer(this.files[0]); this.value=''"></div>
@@ -491,7 +491,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v3.9';
+var PAGE_VER = 'TRACLOGICS v4.1';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -587,6 +587,7 @@ function themePoser() {
   var n = document.getElementById('themeNom'); if (n) n.textContent = theme === 'auto' ? 'automatique (suit la tablette)' : theme;
   var sombre = theme === 'sombre' || (theme === 'auto' && !(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches));
   var m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', sombre ? '#0A0C10' : '#EFF1F5');   // [MT2 v3.2] les vraies couleurs de fond
+  if (typeof bordsMaj === 'function') bordsMaj();   // [MT2 v4.1] le fondu ne vit qu en mode clair
   if (vueMac && vueTour != null) rendre();
 }
 function reglagesBascule() {
@@ -658,8 +659,25 @@ function perteCouple(hpFort, hpFaible, hpRes, tPleinGaz) {
 }
 function piloteDe(nom) { for (var i = 0; i < pilotes.length; i++) if (pilotes[i].nom === nom) return pilotes[i]; return null; }
 // [MT2 v2.9] la masse en piste : voiture + pilote de la seance
+// [MT2 v4.0] ce que la VOITURE vaut pour une seance donnee : la fiche d abord,
+// l ancien profil en secours. Une seule porte, pour tous les calculs de la page.
+var REG_VOITURE = ['masse', 'hp', 'hpRpm', 'tq', 'tqRpm', 'mapRef', 'cda'];
+function reglagesDe(mac, sn) {
+  var pr = profilDe(mac), f = sn ? (ficheEffective(mac, sn).f || {}) : {}, o = {};
+  REG_VOITURE.forEach(function (k) {
+    var x = f[k];
+    o[k] = (x != null && String(x).trim() !== '') ? x : pr[k];
+  });
+  return o;
+}
+// la derniere seance connue d une voiture : ce qu on montre dans sa carte
+function reglagesDerniers(mac) {
+  var v = voitures[mac]; if (!v) return profilDe(mac);
+  var ss = sessionsDe(v);
+  return reglagesDe(mac, ss.length ? ss[ss.length - 1] : null);
+}
 function masseDe(mac, sn) {
-  var pr = profilDe(mac), f = sn ? ficheEffective(mac, sn).f : null;
+  var pr = reglagesDe(mac, sn), f = sn ? ficheEffective(mac, sn).f : null;
   var mv = parseFloat(pr.masse), pil = f && f.pilote ? piloteDe(f.pilote) : null;
   var mp = pil ? parseFloat(pil.poids) : NaN;
   if (!isFinite(mv)) return null;
@@ -747,7 +765,10 @@ function cafePleinGaz(v, st) {
            kmh: vits.length ? mediane(vits) : null, tGaz: n * pas, n: n };
 }
 function cafeDiffFiche(fa, fb) {
-  var noms = { pilote: 'Pilote', pneuModele: 'Modèle de pneu', pneuTaille: 'Grandeur de pneu',
+  var noms = { pilote: 'Pilote',
+    masse: 'Masse sans pilote', hp: 'Puissance', hpRpm: 'Régime de la puissance',   // [MT2 v4.0]
+    tq: 'Couple', tqRpm: 'Régime du couple', mapRef: 'MAP au banc', cda: 'Traînée (CdA)',
+    pneuModele: 'Modèle de pneu', pneuTaille: 'Grandeur de pneu',
     psiAvG: 'Pression av. G', psiAvD: 'Pression av. D', psiArG: 'Pression ar. G', psiArD: 'Pression ar. D',
     ressortAv: 'Ressort avant', ressortAr: 'Ressort arrière', amortAv: 'Amortisseur avant', amortAr: 'Amortisseur arrière',
     barreAv: 'Barre av.', barreAr: 'Barre ar.', hauteurAv: 'Hauteur av.', hauteurAr: 'Hauteur ar.',
@@ -793,7 +814,7 @@ function cafeRendre() {
   }
   var ds = function (ms) { return (ms / 1000).toFixed(2).replace('.', ',') + ' s'; };
   {   // [MT2 v2.9] la masse en piste, si le profil et la fiche la donnent
-    var mA = masseDe(mac, A), mB = masseDe(mac, B), pr2 = profilDe(mac);
+    var mA = masseDe(mac, A), mB = masseDe(mac, B), pr2 = reglagesDe(mac, A);   // [MT2 v4.0]
     if (mA || mB) {
       var ligneM = function (m2) {
         if (!m2) return '—';
@@ -815,9 +836,10 @@ function cafeRendre() {
     }
   }
   {   // [MT2 v3.1] le couple que la pression du jour permet
-    var pgA = cafePleinGaz(v, sa), pgB = cafePleinGaz(v, sb), pr3 = profilDe(mac);
+    var pgA = cafePleinGaz(v, sa), pgB = cafePleinGaz(v, sb);   // [MT2 v4.0] chaque seance a ses reglages
+    var pr3 = reglagesDe(mac, A), prB = reglagesDe(mac, B);
     if (pgA && pgB && pr3.tq) {
-      var cjA = coupleDuJour(pr3, pgA.map), cjB = coupleDuJour(pr3, pgB.map);
+      var cjA = coupleDuJour(pr3, pgA.map), cjB = coupleDuJour(prB, pgB.map);
       if (!cjA && !cjB && mapRefDouteux(pr3, Math.max(pgA.map, pgB.map))) {
         h += '<div class="card"><b>Le couple du jour</b><div class="small" style="margin-top:6px;color:var(--warn)">\u26a0 '
            + 'La piste voit ' + Math.round(Math.max(pgA.map, pgB.map)) + ' kPa, le profil annonce un banc à '
@@ -1291,7 +1313,7 @@ function panVoituresRendre() {
   var h = '';
   ordreVoitures.forEach(function (mac) {
     var v = voitures[mac], sessions = sessionsDe(v);
-    var pr = profilDe(mac);
+    var pr = reglagesDerniers(mac);   // [MT2 v4.0] ce que dit la derniere fiche
     h += '<div class="card"><div class="row" style="justify-content:space-between;flex-wrap:nowrap">'
        + '<b>' + v.nom + '</b>'
        + '<span class="row" style="gap:8px;flex-wrap:nowrap"><span class="small">n° ' + v.num + ' · ' + (v.fw || '?') + '</span>'
@@ -1303,7 +1325,7 @@ function panVoituresRendre() {
        + (pr.hp ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.hp + ' HP' + (pr.hpRpm ? ' @ ' + pr.hpRpm : '') + '</span>' : '')
        + (pr.tq ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.tq + ' lb-pi' + (pr.tqRpm ? ' @ ' + pr.tqRpm : '')
                 + (mapRefDe(pr) > 110 ? ' @ ' + mapRefDe(pr) + ' kPa' : '') + '</span>' : '')
-       + '<button class="btn sec" onclick="profilOuvrir(\'' + mac + '\')">Profil</button></div>';
+       + '</div>';
     if (!sessions.length) h += '<div class="small" style="margin-top:6px">Aucune séance reçue.</div>';
     sessions.slice().reverse().forEach(function (sn) {
       var eff = ficheEffective(mac, sn), f = eff.f, r = f ? ficheResume(f) : '';   // [MT2 v0.4]
@@ -1401,6 +1423,7 @@ function ficheOuvrir(mac, jour, cle) {
   var opts = ['<option value="">—</option>'].concat(pilotes.map(function (p2) {
     return '<option' + (f.pilote === p2.nom ? ' selected' : '') + '>' + p2.nom + '</option>';
   })).join('');
+  var rg = reglagesDe(mac, sn);   // [MT2 v4.1] ce qui vaut pour CETTE seance : heritage et ancien profil compris
   // [MT2 v0.5] une seule ligne dit la reprise : la page reste maigre
   var h = (eff.herite ? '<div class="small" style="margin:0 2px 8px;color:var(--accent)">↩ repris de la '
         + eff.source + '</div>' : '')
@@ -1409,6 +1432,14 @@ function ficheOuvrir(mac, jour, cle) {
         + (sn.best ? ' · meilleur ' + duree(sn.best.dureeMs) : '') + '</div>'
         + '<div class="ch"><label>Pilote</label><select id="fi_pilote">' + opts + '</select></div>'
         + '<div class="small aide" style="opacity:.7">Ajoute un pilote dans le panneau PILOTES.</div></div>'
+        + '<div class="card"><b>La voiture ce jour-là</b>'
+        + '<div class="g2" style="margin-top:8px">' + ch('masse', 'Masse sans pilote', rg.masse, 'kg')
+        + ch('cda', 'Traînée (CdA)', rg.cda) + '</div>'
+        + '<div class="small">Moteur</div>'
+        + '<div class="g2" style="margin-top:4px">' + ch('hp', 'Puissance', rg.hp, 'HP') + ch('hpRpm', 'à quel régime', rg.hpRpm, 'tr/min')
+        + ch('tq', 'Couple', rg.tq, 'lb-pi') + ch('tqRpm', 'à quel régime', rg.tqRpm, 'tr/min')
+        + ch('mapRef', 'MAP au banc', rg.mapRef, 'kPa') + '</div>'
+        + '<div class="small aide" style="opacity:.7">Entre-les une fois : ils se répètent de séance en séance tant que rien ne change. Change le lest ou la pression, et écris-le ici : le Coffee break le verra.</div></div>'
         + '<div class="card"><b>Pneus</b>'
         + '<div class="g2" style="margin-top:8px">' + ch('pneuModele', 'Modèle', f.pneuModele) + ch('pneuTaille', 'Grandeur', f.pneuTaille) + '</div>'
         + '<div class="small">Pressions à froid</div>'
@@ -1432,7 +1463,8 @@ function ficheOuvrir(mac, jour, cle) {
 }
 function ficheEnregistrer() {
   if (!ficheEnCours) return;
-  var f = {}, champs = ['pneuModele', 'pneuTaille', 'psiAvG', 'psiAvD', 'psiArG', 'psiArD',
+  var f = {}, champs = ['masse', 'cda', 'hp', 'hpRpm', 'tq', 'tqRpm', 'mapRef',   // [MT2 v4.0] la voiture ce jour-la
+    'pneuModele', 'pneuTaille', 'psiAvG', 'psiAvD', 'psiArG', 'psiArD',
     'ressortAv', 'ressortAr', 'amortAv', 'amortAr', 'barreAv', 'barreAr', 'hauteurAv', 'hauteurAr',
     'carrossage', 'pincement', 'aileron', 'lame', 'gurney', 'divers'];
   champs.forEach(function (k) { var e = document.getElementById('fi_' + k); if (e && e.value.trim()) f[k] = e.value.trim(); });
@@ -2726,15 +2758,23 @@ function vitInverseBascule() {
   vitInverseMaj(); rendre();
 }
 // [MT2 v3.6] le fondu des bords : 0 aucun, 1 leger, 2 moyen, 3 fort
-var bordsN = 25;   // 0 a 100
+// [MT2 v4.1] mesures sur la dalle du pilote : a 80 % la bande claire du bord droit s efface
+var BORDS_CRANS = [0, 40, 80], BORDS_NOMS = ['aucun', 'faible', 'fort'], bordsN = 40;
 try {
   var b0 = localStorage.getItem('mt2_bordspc');
-  if (b0 !== null) bordsN = Math.max(0, Math.min(100, +b0 || 0));
-  else { var vieux = localStorage.getItem('mt2_bords');   // [MT2 v3.8] les anciens crans
-         if (vieux !== null) bordsN = [0, 25, 45, 65][Math.max(0, Math.min(3, +vieux || 0))]; }
+  if (b0 !== null) { var x0 = Math.max(0, Math.min(100, +b0 || 0));
+    bordsN = BORDS_CRANS.reduce(function (a, c) { return Math.abs(c - x0) < Math.abs(a - x0) ? c : a; }, 0); }
 } catch (e) {}
-function bordsPoser(val) {
-  bordsN = Math.max(0, Math.min(100, +val || 0));
+// le fondu ne sert qu en mode clair : c est la que le defaut de la dalle se voit
+function modeClair() {
+  var t = document.documentElement.getAttribute('data-theme');
+  if (t === 'light') return true;
+  if (t === 'dark') return false;
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+}
+function bordsSuivant() {
+  var i = BORDS_CRANS.indexOf(bordsN); if (i < 0) i = 0;
+  bordsN = BORDS_CRANS[(i + 1) % BORDS_CRANS.length];
   try { localStorage.setItem('mt2_bordspc', String(bordsN)); } catch (e) {}
   bordsMaj();
 }
@@ -2754,10 +2794,12 @@ function bordsMaj() {
   }
   v.style.background = [bande('right', 'left'), bande('left', 'right'),
                         bande('bottom', 'top'), bande('top', 'bottom')].join(', ');
-  v.classList.toggle('allume', bordsN > 0);
-  var c = document.getElementById('curBords'); if (c && +c.value !== bordsN) c.value = bordsN;
+  v.classList.toggle('allume', bordsN > 0 && modeClair());   // [MT2 v4.1] mode clair seulement
+  var b = document.getElementById('btnBords');
+  if (b) b.textContent = 'Bords : ' + BORDS_NOMS[Math.max(0, BORDS_CRANS.indexOf(bordsN))];
   var n = document.getElementById('bordsNote');
-  if (n) n.textContent = bordsN ? bordsN + ' %' : 'aucun';
+  if (n) n.textContent = !bordsN ? 'Le pourtour n\u2019est pas retouché.'
+       : (modeClair() ? 'Assombrit le pourtour.' : 'Sans effet : la page est en mode sombre.');
 }
 function vitInverseMaj() {
   var b = document.getElementById('btnVitCoul'); if (!b) return;
