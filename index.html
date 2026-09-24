@@ -20,7 +20,9 @@
      jamais sortir de l'ecran : en piste, on change de voiture en glissant dans les tours. */
   .fige { position:sticky; top:0; z-index:20; background:var(--bg); padding-bottom:4px; padding-right:50px; box-shadow:0 2px 8px rgba(0,0,0,.10); }
   #smartBande { max-width:min(52vw,640px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #alerteTemp { min-height:34px; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; align-items:center; }
+  /* [MT2 v4.2] plus de hauteur reservee : le bloc n existe que s il alerte */
+  #alerteTemp { flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; align-items:center; }
+  #alerteTemp:empty { display:none; margin-top:0 !important; }
   #alerteTemp .bande { flex:0 0 auto; }
   #btnReglages { position:absolute; top:0; right:0; bottom:4px; z-index:21; width:50px; border-radius:0 0 0 12px;
                  display:flex; align-items:center; justify-content:center; font-size:1.3em; }
@@ -323,9 +325,8 @@
 
 <!-- [MT2 v2.9] le profil d'une voiture : masse, puissance, couple -->
 <div class="panneau" id="panProfil" role="dialog" aria-label="Profil de la voiture">
-  <div class="tete"><b id="profilTitre">Profil</b>
-    <span><button class="btn" onclick="profilEnregistrer()">Enregistrer</button>
-    <button class="btn sec" onclick="panneauFermer('panProfil')">Fermer</button></span></div>
+  <div class="tete"><b id="profilTitre">Limites °C</b>
+    <span><button class="btn sec" onclick="panneauFermer('panProfil')">Fermer</button></span></div>
   <div id="profilCorps"></div>
 </div>
 
@@ -407,15 +408,9 @@
             <path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>
           </svg></button></div>
       <div class="row">
-        <button class="btn sec" onclick="limitesBascule()">Limites °C</button>
         <button class="btn sec" onclick="ligneRefaire()">Refaire la ligne</button>
         <button class="btn sec" onclick="toursEffacer()">Effacer les tours</button>
       </div>
-    </div>
-    <div id="limitesBloc" class="row" style="display:none;margin-top:10px;gap:16px">
-      <label class="small">Eau <input type="range" id="limEau" min="90" max="125" step="1" oninput="limitesChange()"> <b id="limEauV"></b> °C</label>
-      <label class="small">Huile <input type="range" id="limHuile" min="100" max="150" step="1" oninput="limitesChange()"> <b id="limHuileV"></b> °C</label>
-      <label class="small">Air <input type="range" id="limAir" min="20" max="90" step="1" oninput="limitesChange()"> <b id="limAirV"></b> °C</label>
     </div>
     <div id="alerteTemp" class="row" style="margin-top:8px"></div>
   </div>
@@ -491,7 +486,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v4.1';
+var PAGE_VER = 'TRACLOGICS v4.2';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1325,7 +1320,7 @@ function panVoituresRendre() {
        + (pr.hp ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.hp + ' HP' + (pr.hpRpm ? ' @ ' + pr.hpRpm : '') + '</span>' : '')
        + (pr.tq ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.tq + ' lb-pi' + (pr.tqRpm ? ' @ ' + pr.tqRpm : '')
                 + (mapRefDe(pr) > 110 ? ' @ ' + mapRefDe(pr) + ' kPa' : '') + '</span>' : '')
-       + '</div>';
+       + '<button class="btn sec" onclick="limitesOuvrir(\'' + mac + '\')">Limites °C</button></div>';
     if (!sessions.length) h += '<div class="small" style="margin-top:6px">Aucune séance reçue.</div>';
     sessions.slice().reverse().forEach(function (sn) {
       var eff = ficheEffective(mac, sn), f = eff.f, r = f ? ficheResume(f) : '';   // [MT2 v0.4]
@@ -1366,8 +1361,24 @@ function voitureEffacer(mac) {
 }
 // [MT2 v2.9] le profil d'une voiture : ce qui ne change pas d'une seance a l'autre
 var profilMac = null;
-function profilOuvrir(mac) {
-  profilMac = mac;
+function limitesOuvrir(mac) {
+  profilMac = mac;   // [MT2 v4.2] la voiture dont on regle les limites
+  var v = voitures[mac], L = limites(mac);
+  function cur(id, lab, mn, mx) {
+    return '<div class="card"><div class="row" style="justify-content:space-between"><b>' + lab + '</b>'
+         + '<span class="grand"><b id="lim' + id + 'V">' + L[id.toLowerCase()] + '</b> °C</span></div>'
+         + '<input type="range" id="lim' + id + '" min="' + mn + '" max="' + mx + '" step="1" value="' + L[id.toLowerCase()] + '" '
+         + 'style="width:100%;margin-top:10px" oninput="limitesChange()"></div>';
+  }
+  document.getElementById('profilTitre').textContent = (v ? v.nom : mac) + ' · limites °C';
+  document.getElementById('profilCorps').innerHTML =
+      cur('Eau', 'Eau', 90, 125) + cur('Huile', 'Huile', 100, 150) + cur('Air', 'Air admis', 20, 90)
+    + '<div class="small aide" style="opacity:.7">Seule la limite atteinte fait du bruit, une fois par tour et par canal. '
+    + 'Ces seuils appartiennent à cette voiture : une autre garde les siens.</div>';
+  document.getElementById('panProfil').classList.add('ouvert');
+  document.getElementById('voileReglages').classList.add('ouvert');
+}
+function profilOuvrirVieux(mac) {
   var v = voitures[mac], pr = profilDe(mac);
   function ch(id, lab, val, unite) {
     return '<div class="ch"><label>' + lab + (unite ? ' (' + unite + ')' : '') + '</label>'
@@ -1905,23 +1916,20 @@ function limites(mac) {
   var l = limitesTout[mac] || {};
   return { eau: l.eau || LIM_DEF.eau, huile: l.huile || LIM_DEF.huile, air: l.air || LIM_DEF.air };
 }
-function limitesBascule() {
-  var b = document.getElementById('limitesBloc');
-  b.style.display = b.style.display === 'none' ? 'flex' : 'none';
-  if (b.style.display !== 'none') limitesMaj();
-}
+// [MT2 v4.2] limitesBascule() vivait ici. Le bloc qu elle ouvrait a quitte l en-tete
+// pour le panneau de la voiture : la fonction n avait plus de bloc a montrer.
 function limitesMaj() {
-  if (!vueMac) return;
-  var L = limites(vueMac);
+  var mac = profilMac || vueMac; if (!mac) return;   // [MT2 v4.2] la voiture du panneau
+  var L = limites(mac);
   ['eau', 'huile', 'air'].forEach(function (f) {
     var e = document.getElementById('lim' + f[0].toUpperCase() + f.slice(1));
     if (e) { e.value = L[f]; document.getElementById(e.id + 'V').textContent = L[f]; }
   });
 }
 function limitesChange() {
-  if (!vueMac) return;
+  var mac = profilMac || vueMac; if (!mac) return;   // [MT2 v4.2]
   var L = { eau: +document.getElementById('limEau').value, huile: +document.getElementById('limHuile').value, air: +document.getElementById('limAir').value };
-  limitesTout[vueMac] = L;
+  limitesTout[mac] = L;
   try { localStorage.setItem('mt_limites', JSON.stringify(limitesTout)); } catch (e) {}
   limitesMaj(); rendre();
 }
