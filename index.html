@@ -482,7 +482,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v4.6';
+var PAGE_VER = 'TRACLOGICS v4.7';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -530,6 +530,7 @@ function compReference(v, lap) {
     return fin >= smartZeroMs;
   });
   laps = laps.filter(function (l) { return l === lap || sensPareil(v, lap, l); });   // [v79]
+  if (smartOn) laps = laps.filter(function (l) { return memePilote(v, lap, l); });   // [MT2 v4.7]
   var i = laps.indexOf(lap);
   if (compMode === 'precedent') { for (var k = (i >= 0 ? i : laps.length) - 1; k >= 0; k--) if (laps[k] !== lap) return laps[k]; return null; }
   var best = null; laps.forEach(function (l) { if (l !== lap && (!best || l.dureeMs < best.dureeMs)) best = l; });
@@ -2095,8 +2096,23 @@ function smartZeroMaj() {
     : 'Apprentissage sur toute la journée.';
 }
 // les tours qui servent de reference de VITESSE : la journee, sans ceux d'avant la remise a zero
+// [MT2 v4.7] le pilote d un tour : celui de la fiche de sa seance, heritage compris
+function piloteDuTour(v, lap) {
+  if (!v || !lap) return '';
+  var sn = sessionDe(v, lap); if (!sn) return '';
+  var f = ficheEffective(v.mac, sn).f;
+  return (f && f.pilote) ? f.pilote : '';
+}
+// deux tours sont comparables tant qu on ne SAIT pas qu ils ont deux pilotes
+function memePilote(v, a, b) {
+  if (a === b) return true;
+  var pa = piloteDuTour(v, a), pb = piloteDuTour(v, b);
+  if (!pa || !pb) return true;   // au moins une fiche est muette : on ne tranche pas
+  return pa === pb;
+}
 function smartVivier(v, lap) {
   return lapsJour(v, lap).filter(function (l) {
+    if (!memePilote(v, lap, l)) return false;   // [MT2 v4.7] chaque pilote apprend pour lui
     if (!smartZeroMs) return true;
     var fin = l.finUtc ? l.finUtc * 1000 : (l.recuMs || 0);
     return l === lap || fin >= smartZeroMs;
@@ -3351,6 +3367,7 @@ function circuitRendre(v, lap) {
   // le meilleur tour de cette voiture sur ce circuit, pour les ecarts
   var laps = smartOn ? smartVivier(v, lap) : (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap));   // [v50] la journee, moins ce qui precede la remise a zero
   laps = laps.filter(function (l) { return l === lap || sensPareil(v, lap, l); });   // [v79] jamais l'autre sens
+  if (smartOn) laps = laps.filter(function (l) { return memePilote(v, lap, l); });   // [MT2 v4.7] ni l autre pilote
   var meilleurs = null, meilleurNum = null, meilleurStats = null;
   laps.forEach(function (l) {
     if (l.dureeMs == null) return; var p2 = traceEntiere(v.traces[l.num]); var m2 = circuitPourTour(l, p2); if (!m2 || m2.c.id !== m.c.id) return;
