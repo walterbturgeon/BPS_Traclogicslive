@@ -407,10 +407,6 @@
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>
           </svg></button></div>
-      <div class="row">
-        <button class="btn sec" onclick="ligneRefaire()">Refaire la ligne</button>
-        <button class="btn sec" onclick="toursEffacer()">Effacer les tours</button>
-      </div>
     </div>
     <div id="alerteTemp" class="row" style="margin-top:8px"></div>
   </div>
@@ -486,7 +482,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v4.3';
+var PAGE_VER = 'TRACLOGICS v4.4';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1311,8 +1307,10 @@ function panVoituresRendre() {
        + '<button class="btn poub" title="Effacer cette voiture" aria-label="Effacer cette voiture" '
        + 'onclick="voitureEffacer(\'' + mac + '\')">' + ICO_POUB + '</button></span></div>'
        + '<div class="small" style="opacity:.7">' + mac + '</div>'
-       + '<div class="row" style="margin-top:8px">'   // [MT2 v4.3] la voiture, pas ses reglages
-       + '<button class="btn sec" onclick="limitesOuvrir(\'' + mac + '\')">Limites °C</button></div>';
+       + '<div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">'   // [MT2 v4.4] les actions d atelier
+       + '<button class="btn sec" onclick="limitesOuvrir(\'' + mac + '\')">Limites °C</button>'
+       + '<button class="btn sec" onclick="ligneRefaire(\'' + mac + '\')">Refaire la ligne</button>'
+       + '<button class="btn sec" onclick="toursEffacer(\'' + mac + '\')">Effacer les tours</button></div>';
     if (!sessions.length) h += '<div class="small" style="margin-top:6px">Aucune séance reçue.</div>';
     sessions.slice().reverse().forEach(function (sn) {
       var eff = ficheEffective(mac, sn), f = eff.f, r = f ? ficheResume(f) : '';   // [MT2 v0.4]
@@ -3475,17 +3473,21 @@ function circuitRendre(v, lap) {
 }
 
 // ---- commandes ----
-async function ligneRefaire() {
-  if (!vueMac) return;
-  if (!confirm('Refaire la ligne virtuelle de ' + voitures[vueMac].nom + ' ? Le module oublie sa ligne et la recalibre aux 2 prochains passages.')) return;
-  if (await envoyerCmd(vueMac, [0x03])) etat('Ligne de ' + voitures[vueMac].nom + ' a refaire : commande partie.');
+// [MT2 v4.4] mac donne = la voiture de la carte ; sans argument, celle qui est vue
+async function ligneRefaire(mac) {
+  mac = mac || vueMac; if (!mac || !voitures[mac]) return;
+  var nom = voitures[mac].nom;
+  if (!confirm('Refaire la ligne virtuelle de ' + nom + ' ?\n\nLe module oublie sa ligne et la recalibre aux 2 prochains passages.')) return;
+  if (await envoyerCmd(mac, [0x03])) etat('Ligne de ' + nom + ' à refaire : commande partie.');
 }
-async function toursEffacer() {
-  if (!vueMac) return;
-  var v = voitures[vueMac];
-  if (!confirm('Effacer les ' + Object.keys(v.laps).length + ' tour(s) de ' + v.nom + ' sur cette page, et remettre son compteur a zero ?')) return;
-  v.laps = {}; v.traces = {}; vueTour = null; dbEffacerVoiture(vueMac); marquer(vueMac, null); sauver(); rendre(); memoireEtat();   // [v22]
-  if (await envoyerCmd(vueMac, [0x05])) etat('Tours de ' + v.nom + ' remis a zero.');
+async function toursEffacer(mac) {
+  mac = mac || vueMac; if (!mac) return;
+  var v = voitures[mac]; if (!v) return;
+  if (!confirm('Effacer les ' + Object.keys(v.laps).length + ' tour(s) de ' + v.nom + ' sur cette page,\n'
+             + 'et remettre le compteur du boîtier à zéro ?')) return;
+  v.laps = {}; v.traces = {}; if (mac === vueMac) vueTour = null;
+  dbEffacerVoiture(mac); marquer(mac, null); sauver(); rendre(); memoireEtat(); panVoituresRendre();   // [v22]
+  if (await envoyerCmd(mac, [0x05])) etat('Tours de ' + v.nom + ' remis à zéro.');
 }
 
 // ---- mise a jour automatique de la page ----
