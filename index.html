@@ -486,7 +486,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v4.2';
+var PAGE_VER = 'TRACLOGICS v4.3';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -665,12 +665,9 @@ function reglagesDe(mac, sn) {
   });
   return o;
 }
-// la derniere seance connue d une voiture : ce qu on montre dans sa carte
-function reglagesDerniers(mac) {
-  var v = voitures[mac]; if (!v) return profilDe(mac);
-  var ss = sessionsDe(v);
-  return reglagesDe(mac, ss.length ? ss[ss.length - 1] : null);
-}
+// [MT2 v4.3] reglagesDerniers() vivait ici. Elle ne servait qu aux pastilles de la
+// carte voiture, qui repetaient la fiche et mentaient des qu une ancienne seance
+// portait autre chose. Les pastilles sont parties, la fonction aussi.
 function masseDe(mac, sn) {
   var pr = reglagesDe(mac, sn), f = sn ? ficheEffective(mac, sn).f : null;
   var mv = parseFloat(pr.masse), pil = f && f.pilote ? piloteDe(f.pilote) : null;
@@ -1308,18 +1305,13 @@ function panVoituresRendre() {
   var h = '';
   ordreVoitures.forEach(function (mac) {
     var v = voitures[mac], sessions = sessionsDe(v);
-    var pr = reglagesDerniers(mac);   // [MT2 v4.0] ce que dit la derniere fiche
     h += '<div class="card"><div class="row" style="justify-content:space-between;flex-wrap:nowrap">'
        + '<b>' + v.nom + '</b>'
        + '<span class="row" style="gap:8px;flex-wrap:nowrap"><span class="small">n° ' + v.num + ' · ' + (v.fw || '?') + '</span>'
        + '<button class="btn poub" title="Effacer cette voiture" aria-label="Effacer cette voiture" '
        + 'onclick="voitureEffacer(\'' + mac + '\')">' + ICO_POUB + '</button></span></div>'
        + '<div class="small" style="opacity:.7">' + mac + '</div>'
-       + '<div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">'
-       + (pr.masse ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.masse + ' kg</span>' : '')
-       + (pr.hp ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.hp + ' HP' + (pr.hpRpm ? ' @ ' + pr.hpRpm : '') + '</span>' : '')
-       + (pr.tq ? '<span class="bande" style="margin-left:0;background:#4a4a52">' + pr.tq + ' lb-pi' + (pr.tqRpm ? ' @ ' + pr.tqRpm : '')
-                + (mapRefDe(pr) > 110 ? ' @ ' + mapRefDe(pr) + ' kPa' : '') + '</span>' : '')
+       + '<div class="row" style="margin-top:8px">'   // [MT2 v4.3] la voiture, pas ses reglages
        + '<button class="btn sec" onclick="limitesOuvrir(\'' + mac + '\')">Limites °C</button></div>';
     if (!sessions.length) h += '<div class="small" style="margin-top:6px">Aucune séance reçue.</div>';
     sessions.slice().reverse().forEach(function (sn) {
