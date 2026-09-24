@@ -482,7 +482,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v4.5';
+var PAGE_VER = 'TRACLOGICS v4.6';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -617,6 +617,24 @@ var vueMac = null;        // l'onglet ouvert
 // La cle d'une fiche = MAC de la voiture + jour + numero de session.
 // =====================================================================
 var fiches = {}, pilotes = [], profils = {};   // [MT2 v2.9] profils : par MAC de voiture
+// [MT2 v4.6] le numero de course, par MAC. Vide ou absent : on garde le nom du boitier.
+var aliasTout = {};
+try { aliasTout = JSON.parse(localStorage.getItem('mt2_alias') || '{}') || {}; } catch (e) { aliasTout = {}; }
+function nomAppliquer(v) {
+  if (!v) return;
+  if (!v.nomBle) v.nomBle = v.nom;   // la premiere fois : ce qu on avait est le nom du boitier
+  var a = (aliasTout[v.mac] || '').trim();
+  v.nom = a || v.nomBle || v.nom;
+}
+function nomsAppliquer() { Object.keys(voitures).forEach(function (m) { nomAppliquer(voitures[m]); }); }
+function aliasPoser(mac, txt) {
+  var t = (txt || '').trim();
+  if (t) aliasTout[mac] = t; else delete aliasTout[mac];
+  try { localStorage.setItem('mt2_alias', JSON.stringify(aliasTout)); } catch (e) {}
+  nomAppliquer(voitures[mac]);
+  jrn('Voiture ' + mac + (t ? ' : numéro ' + t : ' : retour au nom du boîtier'));
+  marquer(mac, null); sauver(); panVoituresRendre(); rendre();
+}
 try { fiches = JSON.parse(localStorage.getItem('mt2_fiches') || '{}'); } catch (e) { fiches = {}; }
 try { pilotes = JSON.parse(localStorage.getItem('mt2_pilotes') || '[]'); } catch (e) { pilotes = []; }
 pilotes = pilotes.map(function (x) { return typeof x === 'string' ? { nom: x } : x; });   // [MT2 v2.9] un pilote porte un poids
@@ -1310,7 +1328,11 @@ function panVoituresRendre() {
        + '<span class="row" style="gap:8px;flex-wrap:nowrap"><span class="small">n° ' + v.num + ' · ' + (v.fw || '?') + '</span>'
        + '<button class="btn poub" title="Effacer cette voiture" aria-label="Effacer cette voiture" '
        + 'onclick="voitureEffacer(\'' + mac + '\')">' + ICO_POUB + '</button></span></div>'
-       + '<div class="small" style="opacity:.7">' + mac + '</div>'
+       + '<div class="small" style="opacity:.7">' + mac + (v.nomBle && v.nomBle !== v.nom ? ' · boîtier ' + v.nomBle : '') + '</div>'
+       + '<div class="ch" style="margin-top:8px"><label>Numéro de course</label>'
+       + '<input value="' + (aliasTout[mac] || '').replace(/"/g, '&quot;') + '" placeholder="' + (v.nomBle || '') + '" '
+       + 'onchange="aliasPoser(\'' + mac + '\', this.value)"></div>'
+       + '<div class="small aide" style="opacity:.7">Vide : la page garde le nom du boîtier.</div>'
        + '<div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">'   // [MT2 v4.4] les actions d atelier
        + '<button class="btn sec" onclick="limitesOuvrir(\'' + mac + '\')">Limites °C</button>'
        + '<button class="btn sec" onclick="ligneRefaire(\'' + mac + '\')">Refaire la ligne</button>'
@@ -1730,6 +1752,7 @@ function macTexte(a) { var s = []; for (var i = 0; i < 6; i++) s.push(('0' + a[i
 function voitureOuvrir(mac) {
   if (!voitures[mac]) {
     voitures[mac] = { mac: mac, idx: null, nom: 'CAR' + mac.slice(-5).replace(':', ''), num: 0, fw: '', vuMs: 0, laps: {}, traces: {} };
+    voitures[mac].nomBle = voitures[mac].nom; nomAppliquer(voitures[mac]);   // [MT2 v4.6]
     ordreVoitures.push(mac);
     if (!vueMac) vueMac = mac;
     jrn('Nouvelle voiture ' + mac);
@@ -1741,8 +1764,9 @@ function decodeIdent(idx, p) {
   var mac = macTexte(p.subarray(1, 7));
   var v = voitureOuvrir(mac);
   var nomNeuf = new TextDecoder().decode(p.subarray(8, 16)).replace(/\0+$/, '');
-  if (v.nom !== nomNeuf) jrn('Voiture ' + mac + ' se nomme ' + nomNeuf);
-  v.idx = idx; v.nom = nomNeuf || v.nom; v.num = p[7]; v.fw = new TextDecoder().decode(p.subarray(16, 28)).replace(/\0+$/, ''); v.vuMs = Date.now();
+  if (v.nomBle !== nomNeuf && nomNeuf) jrn('Boîtier ' + mac + ' se nomme ' + nomNeuf);
+  v.idx = idx; if (nomNeuf) v.nomBle = nomNeuf; nomAppliquer(v);   // [MT2 v4.6] le numero du jour gagne
+  v.num = p[7]; v.fw = new TextDecoder().decode(p.subarray(16, 28)).replace(/\0+$/, ''); v.vuMs = Date.now();
   idxVersMac[idx] = mac;
   // ce qui attendait cette identite
   var reste = [];
@@ -2470,6 +2494,7 @@ function restaurer(fichier) {
       if (fichesRep) fichesSauver();
       if (pilotesRep) pilotesSauver();
       if (fichesRep || pilotesRep) jrn('Restauration : ' + fichesRep + ' fiche(s) et ' + pilotesRep + ' pilote(s) ajoutes');
+      nomsAppliquer();   // [MT2 v4.6]
       if (!vueMac && ordreVoitures.length) vueMac = ordreVoitures[0];
       catsRelier(); sauver(); rendre(); jrn('Restauration : ' + ajoutes + ' tour(s) ajoute(s) depuis ' + fichier.name); alert(ajoutes + ' tour(s) restaure(s). Les tours deja presents sont gardes tels quels.');
     } catch (e) { alert('Sauvegarde illisible : ' + e.message); }
@@ -2488,6 +2513,7 @@ function charger() {
     } else {
       r.voitures.sort(function (a, b) { return (a.ordre || 0) - (b.ordre || 0); }).forEach(function (x) { voitures[x.mac] = { mac: x.mac, nom: x.nom, num: x.num, fw: x.fw, vuMs: x.vuMs, idx: null, laps: {}, traces: {} }; ordreVoitures.push(x.mac); });
       r.tours.forEach(function (t) { var v = voitures[t.mac]; if (!v) { v = voitures[t.mac] = { mac: t.mac, nom: '?', num: 0, fw: '', vuMs: 0, idx: null, laps: {}, traces: {} }; ordreVoitures.push(t.mac); } if (t.lap) v.laps[t.num] = t.lap; if (t.trace) v.traces[t.num] = t.trace; });
+      nomsAppliquer();   // [MT2 v4.6]
       if (ordreVoitures.length) vueMac = ordreVoitures[0];
     }
     catsRelier(); rendre(); memoireEtat();
