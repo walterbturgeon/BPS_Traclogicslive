@@ -172,10 +172,9 @@
   .ver { color:var(--muted); font-size:.72em; letter-spacing:.06em; text-transform:uppercase; }
   /* [MT2 v3.4] le fondu du pourtour : mode clair seulement */
   .vignette { position:fixed; inset:0; pointer-events:none; z-index:60; display:none; }
-  :root[data-theme="light"] .vignette { display:block; box-shadow:inset 0 0 60px 6px rgba(0,0,0,.17); }
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"]) .vignette { display:block; box-shadow:inset 0 0 60px 6px rgba(0,0,0,.17); }
-  }
+  .vignette.b1 { display:block; box-shadow:inset 0 0  60px  6px rgba(0,0,0,.17); }
+  .vignette.b2 { display:block; box-shadow:inset 0 0  95px 10px rgba(0,0,0,.27); }
+  .vignette.b3 { display:block; box-shadow:inset 0 0 135px 16px rgba(0,0,0,.38); }
   .fige { background:var(--bg); box-shadow:0 6px 18px rgba(0,0,0,.45); }
   :root[data-theme="light"] .fige { box-shadow:0 6px 18px rgba(0,0,0,.12); }
   @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .fige { box-shadow:0 6px 18px rgba(0,0,0,.12); } }
@@ -377,6 +376,8 @@
 <div class="card" style="margin:0 0 10px">
   <div class="row"><button class="btn sec" id="btnDetails" onclick="detailsBascule()">Détails</button><span class="small">Numéros de série (MAC) et versions des boîtes.</span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" id="btnVitCoul" onclick="vitInverseBascule()">Vitesse : rouge = lent</button><span class="small" id="vitCoulNote"></span></div>
+  <div class="row" style="margin-top:8px"><button class="btn sec" id="btnBords" onclick="bordsSuivant()">Bords : léger</button><span class="small" id="bordsNote"></span></div>
+  <div class="small aide" style="opacity:.7;margin-top:4px">Une dalle n’éclaire pas ses bords comme son centre. Monte le cran jusqu’à ce que le défaut de la tienne ne se voie plus.</div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="demoCharger()">Démonstration</button><span class="small aide" style="opacity:.75">Des tours d'exemple, sans voiture ni collecteur.</span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="sauvegarder()">Sauvegarder (fichier)</button><button class="btn sec" onclick="document.getElementById('fichierRestaure').click()">Restaurer</button><input type="file" id="fichierRestaure" accept=".json,application/json" style="display:none" onchange="restaurer(this.files[0]); this.value=''"></div>
   <div class="small" id="memEtat" style="margin-top:6px"></div>
@@ -488,7 +489,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v3.4';
+var PAGE_VER = 'TRACLOGICS v3.6';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -2722,6 +2723,21 @@ function vitInverseBascule() {
   try { localStorage.setItem('mt2_vitinv', vitInverse ? '1' : '0'); } catch (e) {}
   vitInverseMaj(); rendre();
 }
+// [MT2 v3.6] le fondu des bords : 0 aucun, 1 leger, 2 moyen, 3 fort
+var BORDS_NOMS = ['aucun', 'léger', 'moyen', 'fort'], bordsN = 1;
+try { var b0 = localStorage.getItem('mt2_bords'); if (b0 !== null) bordsN = Math.max(0, Math.min(3, +b0 || 0)); } catch (e) {}
+function bordsSuivant() {
+  bordsN = (bordsN + 1) % 4;
+  try { localStorage.setItem('mt2_bords', String(bordsN)); } catch (e) {}
+  bordsMaj();
+}
+function bordsMaj() {
+  var v = document.querySelector('.vignette');
+  if (v) v.className = 'vignette' + (bordsN ? ' b' + bordsN : '');
+  var b = document.getElementById('btnBords'); if (b) b.textContent = 'Bords : ' + BORDS_NOMS[bordsN];
+  var n = document.getElementById('bordsNote');
+  if (n) n.textContent = bordsN ? 'Assombrit le pourtour de l\u2019écran.' : 'Le pourtour n\u2019est pas retouché.';
+}
 function vitInverseMaj() {
   var b = document.getElementById('btnVitCoul'); if (!b) return;
   b.textContent = vitInverse ? 'Vitesse : vert = lent' : 'Vitesse : rouge = lent';
@@ -2805,6 +2821,13 @@ function dessiner(v, lap) {
     var ptsRef = traceEntiere(v.traces[compRef.num]), dRef = distCumul(ptsRef), dCur = distCumul(pts);
     dvs = pts.map(function (p, i) { return p.kmh - vitesseA(ptsRef, dRef, dCur[i]); });
   }
+  // [MT2 v3.5] l'axe du circuit reconnu, SOUS la trace : il montre le trace la ou
+  // la voiture n'est pas passee, et ne hache plus sa couleur la ou elle l'a suivi.
+  if (circVue && circVue.axe) {
+    var encreAxe = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || '#fff';
+    g.save(); g.globalAlpha = 0.45; g.strokeStyle = encreAxe; g.lineWidth = 1.5; g.setLineDash([6, 6]); g.beginPath();
+    circVue.axe.forEach(function (p, i) { var x = X(p.dx, p.dy), y = Y(p.dx, p.dy); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); }); g.closePath(); g.stroke(); g.restore();
+  }
   g.lineWidth = 5; g.lineCap = 'round'; g.lineJoin = 'round';
   for (var i = 1; i < pts.length; i++) {
     if (smartOn && smartSectionVue && smartSectionVue.i0 != null) {   // [v66] une seule section en couleur
@@ -2819,11 +2842,7 @@ function dessiner(v, lap) {
   }
   g.globalAlpha = 1;   // [v80]
   g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.arc(X(pts[0].dx, pts[0].dy), Y(pts[0].dx, pts[0].dy), 5, 0, Math.PI * 2); g.fill(); g.stroke();
-  // [v10] l'axe du circuit reconnu (fin, blanc) et les bornes des partielles (traits magenta)
-  if (circVue && circVue.axe) {   // [v76] l'axe et les bornes, dans les deux modes
-    g.save(); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1.5; g.setLineDash([6, 6]); g.beginPath();
-    circVue.axe.forEach(function (p, i) { var x = X(p.dx, p.dy), y = Y(p.dx, p.dy); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); }); g.closePath(); g.stroke(); g.restore();
-  }
+  // [MT2 v3.5] l'axe du circuit est maintenant dessine AVANT la trace, plus haut.
   if (circVue && circVue.bornes) {
     var LET = circVue.lettre || 'P', DEMI = 16;   // [v68] 16 m de chaque cote de l'axe : la piste et sa marge
     var ligneBorne = function (dx, dy, px, py, nom) {
@@ -3434,6 +3453,7 @@ try { details = localStorage.getItem('mt_details') === '1'; } catch (e) {}
 document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails';
 document.body.classList.toggle('avecAide', details);   // [MT2 v2.5]
 vitInverseMaj();   // [MT2 v3.3] le libelle du bouton, au demarrage
+bordsMaj();        // [MT2 v3.6] le fondu des bords, au demarrage
 try { smartOn = localStorage.getItem('mt_smart') === '1'; } catch (e) {}
 try { smartZeroMs = +(localStorage.getItem('mt_smartzero') || 0) || 0; } catch (e) {}
 try { limitesTout = JSON.parse(localStorage.getItem('mt_limites') || '{}') || {}; } catch (e) { limitesTout = {}; }
