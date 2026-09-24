@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'draglog-mt-';
-const CACHE = PREFIX + 'v110';   // v110 : secteurs du circuit poses une fois, filtre de pleine charge cale
+const CACHE = PREFIX + 'v111';   // v111 : bandeau du lien, alarme de perte, numeros qui ne s ecrasent plus, trafic au papillon
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg',
                 './circuits_index.csv', './circuits_offsets.csv', '../circuits_index.csv', '../circuits_offsets.csv'];
 

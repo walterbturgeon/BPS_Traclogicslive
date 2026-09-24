@@ -19,6 +19,12 @@
   /* [v24] LE BANDEAU RESTE EN HAUT. Le bouton de connexion et les onglets des voitures ne doivent
      jamais sortir de l'ecran : en piste, on change de voiture en glissant dans les tours. */
   .fige { position:sticky; top:0; z-index:20; background:var(--bg); padding-bottom:4px; padding-right:50px; box-shadow:0 2px 8px rgba(0,0,0,.10); }
+  /* [MT2 v5.3] le bandeau du lien : orange, car il demande l'attention, et il ne se ferme pas */
+  #bandeauBle { position:sticky; top:0; z-index:40; background:var(--accent); color:#fff;
+    font-weight:700; padding:10px 14px; border-radius:10px; margin:0 0 10px; cursor:pointer;
+    display:flex; align-items:center; gap:10px; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+  #bandeauBle .pt { width:10px; height:10px; border-radius:50%; background:#fff; flex:0 0 auto; animation:bleBat 1.4s ease-in-out infinite; }
+  @keyframes bleBat { 0%,100%{opacity:1} 50%{opacity:.25} }
   #smartBande { max-width:min(52vw,640px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* [MT2 v4.2] plus de hauteur reservee : le bloc n existe que s il alerte */
   #alerteTemp { flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; align-items:center; }
@@ -280,6 +286,10 @@
   <span class="badge" id="majBadge" style="display:none">mise à jour…</span>
 </header>
 
+<div id="bandeauBle" onclick="connecter()" title="Toucher pour se connecter au collecteur">
+  <span class="pt"></span><span>Bluetooth déconnecté — les tours ne rentrent pas. Toucher pour connecter.</span>
+</div>
+
 <div class="card">
   <div class="row">
     <button class="btn" id="btnConn" onclick="connecter()" title="Se connecter au collecteur RELAY_MT">Connect</button>
@@ -488,7 +498,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.2';
+var PAGE_VER = 'TRACLOGICS v5.3';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1689,6 +1699,7 @@ function etat(t) { document.getElementById('etat').textContent = t; jrn(t); }
 // « Connecte » vert = la tablette recoit. Un mot court laisse la place aux voitures.
 function connBouton(ok) {
   barreMaj();   // [MT2]
+  bandeauLien(ok);   // [MT2 v5.3] le bandeau suit le bouton
   var b = document.getElementById('btnConn');
   b.textContent = ok ? 'Connecté' : 'Connect';
   b.style.background = ok ? 'var(--ok)' : '';
@@ -1710,6 +1721,10 @@ async function connecter() {
       connecte = false; cmdChar = null;
       connBouton(false);
       etat('Collecteur deconnecte. Reconnexion dans 3 s...');
+      // [MT2 v5.3] ⚠ UNE PERTE DE LIEN EN ROULANT DOIT S'ENTENDRE. Le 24 sept., trois tours
+      // ne sont jamais arrives sur la tablette et rien ne l'a dit. Trois bips DESCENDANTS,
+      // deux fois : on ne les confond pas avec l'alerte de temperature (bips graves egaux).
+      if (lienDejaEu) alerteLienPerdu();
       setTimeout(reconnecter, 3000);
     });
     var srv = await device.gatt.connect();
@@ -1728,7 +1743,7 @@ async function attacher(server) {
   if (dataChar) { try { dataChar.removeEventListener('characteristicvaluechanged', notif); } catch (e) {} }
   dataChar = ch; ch.addEventListener('characteristicvaluechanged', notif);
   cmdChar = await svc.getCharacteristic(RL_CMD);
-  connecte = true;
+  connecte = true; lienDejaEu = true;   // [MT2 v5.3] desormais une perte se fait entendre
   connBouton(true);
   var nom = device.name || '?';
   etat('Connecte a ' + nom + '. Le collecteur renvoie ce qu’il garde...');
@@ -1872,8 +1887,10 @@ function decodeTour(v, b) {
   if (b.length < 8 + NB_CANAUX * 6 + 2) { jrn('Resume tronque (' + b.length + ' o) pour ' + v.nom); return; }
   var dv = new DataView(b.buffer, b.byteOffset);
   var num = dv.getUint16(1, true);
+  var dureeMs = dv.getUint32(3, true);
+  num = numSansEcraser(v, num, dureeMs);   // [MT2 v5.3] meme numero + autre duree = autre seance
   var lap = v.laps[num] || { num: num };
-  lap.dureeMs = dv.getUint32(3, true); lap.source = dv.getUint8(7);
+  lap.dureeMs = dureeMs; lap.source = dv.getUint8(7);
   var vals = [], off = 8;
   for (var i = 0; i < NB_CANAUX; i++) { vals.push({ min: dv.getInt16(off, true), max: dv.getInt16(off + 2, true), avg: dv.getInt16(off + 4, true) }); off += 6; }
   lap.vals = vals; lap.flags = dv.getUint16(off, true); off += 2;
@@ -1890,7 +1907,7 @@ function decodeTour(v, b) {
 function decodeValeurs(v, b) {
   if (b.length < 60) return;
   var dv = new DataView(b.buffer, b.byteOffset);
-  var num = dv.getUint16(1, true);
+  var num = numRemap(v, dv.getUint16(1, true));   // [MT2 v5.3] suit le deplacement du resume
   var pv = { lect: dv.getUint8(3), items: [] };
   for (var k = 0; k < 4; k++) {
     var it = { idx: dv.getUint8(4 + k), min: dv.getFloat32(8 + k * 12, true), max: dv.getFloat32(12 + k * 12, true), moy: dv.getFloat32(16 + k * 12, true), n: dv.getUint8(56 + k), nom: '', unite: '' };
@@ -1906,7 +1923,7 @@ function decodeValeurs(v, b) {
 function decodeTrace(v, b) {
   if (b.length < 16) return;
   var dv = new DataView(b.buffer, b.byteOffset);
-  var num = dv.getUint16(1, true), idx = b[3], nb = b[4], npts = b[5];
+  var num = numRemap(v, dv.getUint16(1, true)), idx = b[3], nb = b[4], npts = b[5];   // [MT2 v5.3]
   var t = v.traces[num] || { parts: [], nb: nb }; t.nb = nb; t.intervalMs = dv.getUint16(6, true);   // [v10] pour les partielles
   var pts = [], off = 16;
   for (var i = 0; i < npts && off + 5 <= b.length; i++) { pts.push({ dx: dv.getInt16(off, true), dy: dv.getInt16(off + 2, true), kmh: b[off + 4] }); off += 5; }
@@ -1919,7 +1936,7 @@ function traceEntiere(t) { if (!t) return []; var out = []; for (var i = 0; i < 
 // du tour, sur la meme grille que la trace : sa position vient de la trace, par le temps.
 function decodeCatalogue(v, b) {
   if (b.length < 145) { jrn('Catalogue tronque (' + b.length + ' o) pour ' + v.nom); return; }
-  var dv = new DataView(b.buffer, b.byteOffset), num = dv.getUint16(1, true), part = b[3];
+  var dv = new DataView(b.buffer, b.byteOffset), num = numRemap(v, dv.getUint16(1, true)), part = b[3];   // [MT2 v5.3]
   if (part > 1) return;
   var lap = v.laps[num] || { num: num, recuMs: Date.now() };
   var cat = lap.cat || { lect: b[4], ch: [] }; cat.lect = b[4];
@@ -1943,7 +1960,7 @@ function decodeCatalogue(v, b) {
 }
 function decodeCanaux(v, b) {
   if (b.length < 10) return;
-  var dv = new DataView(b.buffer, b.byteOffset), num = dv.getUint16(1, true), part = b[3], nb = b[4], n = b[5], s0 = dv.getUint16(6, true);
+  var dv = new DataView(b.buffer, b.byteOffset), num = numRemap(v, dv.getUint16(1, true)), part = b[3], nb = b[4], n = b[5], s0 = dv.getUint16(6, true);   // [MT2 v5.3]
   var fmt = b[9] || 0, variable = !!(fmt & 1), tronque = !!(fmt & 2);   // [MT2 v1.9]
   var lap = v.laps[num] || { num: num, recuMs: Date.now() };
   var can = lap.can || { nb: nb, parts: {} }; can.nb = nb;
@@ -2075,6 +2092,8 @@ var RE_LAMBDA = /lambda|afr/i;
 // [MT2 v2.0] la pointe pauvre en virage, et la mediane du tour : les deux en lambda
 function essenceTour(v, lap) {
   var k = smartCanal(lap, RE_LAMBDA); if (k < 0) return null;
+  var gazK = smartCanal(lap, RE_GAZ);
+  if (gazK < 0) return null;          // [MT2 v5.3] sans le papillon, aucun verdict sur l essence
   var tr = v.traces[lap.num], pts = traceEntiere(tr); if (pts.length < 20) return null;
   var ech = canEchantillons(lap), inter = (tr && tr.intervalMs) || 500;
   var vMax = 0; pts.forEach(function (p) { if (p.kmh > vMax) vMax = p.kmh; });
@@ -2085,6 +2104,15 @@ function essenceTour(v, lap) {
     if (x > 5) x = x / 14.7;            // la voie donne un AFR : on ramene en lambda
     if (x < 0.5 || x > 1.6) continue;   // hors plage : capteur froid ou coupure
     tous.push(x);
+    // [MT2 v5.3] ⚠ PIED LEVE, LE MELANGE EST PAUVRE, ET C'EST NORMAL. Mesure au log Link
+    // 50 Hz du 24 sept. : a plus de 0,9 G et moins de 20 % de papillon, lambda vaut 1,088 ;
+    // au MEME G a pleine charge, 0,779. Juger le melange sans regarder le papillon
+    // accusait donc la prise d'essence... precisement dans les tours de trafic, ou le pied
+    // est le plus souvent leve. Le moteur doit TIRER pour qu'un manque d'essence se voie.
+    if (gazK >= 0) {
+      var gg = canValeurA(lap, ech, gazK, i * inter);
+      if (gg == null || gg < 50) continue;
+    }
     if (pts[i].kmh < 0.70 * vMax) virage.push(x);
   }
   if (tous.length < 20 || virage.length < 8) return null;
@@ -2104,6 +2132,15 @@ function alerteEssence(v, lap) {
   }
   if (suite.length < 3) return null;
   var monte = suite[0] > suite[1] && suite[1] > suite[2];   // trois tours de hausse de suite
+  // [MT2 v5.3] DEUX GARDES DE PLUS, contre un faux positif mesure le 24 sept. 2026 :
+  // le tour 407 criait sur une pointe a 0,930 apres 0,910 et 0,903 -- une hausse de
+  // 0,7 % par tour, soit du bruit. Le pilote a confirme qu il n avait pas manque d essence.
+  // (1) la pointe doit etre VRAIMENT pauvre : au-dessus de 50 % de papillon, le journal
+  //     Link a 50 Hz donne lambda 0,78 a 0,80, quel que soit le G lateral. A 1,00 le
+  //     moteur est franchement pauvre sous charge ; a 0,93 il ne l est pas.
+  // (2) la hausse sur les trois tours doit valoir au moins 0,05 de lambda.
+  if (ici.pointe < 1.00) return null;
+  if (suite[0] - suite[2] < 0.05) return null;
   if (!monte || ecart < 0.06 * ici.med) return null;
   return { n: 2, k: -1, s: -1,
     txt: '\u26a0 mélange pauvre en virage, 3 tours de suite (\u03bb ' + ici.pointe.toFixed(2).replace('.', ',')
@@ -2247,11 +2284,109 @@ function meteoCompatible(a, b) {
   if (Math.abs(a.meteo.degres - b.meteo.degres) > 3) return false;
   return (a.meteo.pluie >= 0.2) === (b.meteo.pluie >= 0.2);
 }
+// =====================================================================
+// [MT2 v5.3] CINQ GARDES, toutes nees d'une seance reelle du 24 sept. 2026
+// =====================================================================
+
+// ---- 1 et 2 : LE LIEN BLUETOOTH NE PEUT PLUS MANQUER EN SILENCE ----
+// ⚠ Le 24 sept., la page n'etait pas connectee au depart : les trois premiers tours
+// d'une seance ne sont jamais arrives sur la tablette. Ils etaient pourtant dans le
+// collecteur. Rien a l'ecran ne disait que le lien manquait -- le bouton « Connect »
+// gris se confond avec le reste. Desormais un bandeau orange barre le haut de la page,
+// et la perte du lien en roulant se fait entendre.
+var lienDejaEu = false;        // a-t-on ete connecte au moins une fois dans cette page ?
+function bandeauLien(ok) {
+  var e = document.getElementById('bandeauBle'); if (!e) return;
+  e.style.display = ok ? 'none' : '';
+}
+// une voix a elle : trois bips DESCENDANTS, pour ne pas la confondre avec une
+// alerte de temperature (des bips graves egaux)
+function alerteLienPerdu() {
+  vibrer();
+  if (!sonOn) return;
+  [900, 680, 480].forEach(function (f, i) { setTimeout(function () { bip(f, 260); }, i * 320); });
+  setTimeout(function () { [900, 680, 480].forEach(function (f, i) { setTimeout(function () { bip(f, 260); }, i * 320); }); }, 1400);
+}
+
+// ---- 3 : DEUX SEANCES PEUVENT PORTER LES MEMES NUMEROS ----
+// ⚠ Mesure du 24 sept. : le kit 28 a numerote DEUX seances a partir de 201. Le matin
+// avait un tour 204 de 117,327 s ; l'apres-midi un autre de 122,751 s. La page range
+// par numero : sans cette garde, le second ecrase le premier, en silence.
+// La regle : un numero deja pris, avec une AUTRE duree, n'est pas le meme tour. On
+// deplace alors toute la seance qui arrive vers la premiere bande de numeros libre.
+// Le decalage est garde dans l'appareil : un rechargement de page ne le perd pas.
+var sessionDecal = (function () {
+  try { return JSON.parse(localStorage.getItem('mt2_decal') || '{}') || {}; } catch (e) { return {}; }
+})();
+function decalSauver() { try { localStorage.setItem('mt2_decal', JSON.stringify(sessionDecal)); } catch (e) {} }
+// applique un decalage DEJA decide (les paquets trace, canaux et catalogue suivent le resume)
+function numRemap(v, num) {
+  var d = sessionDecal[v.mac]; if (!d) return num;
+  var s0 = Math.floor(num / 200), s = d[s0];
+  return (s == null) ? num : s * 200 + (num % 200);
+}
+// decide, au vu du resume : meme numero + autre duree = autre seance
+function numSansEcraser(v, num, dureeMs) {
+  var d = sessionDecal[v.mac] || (sessionDecal[v.mac] = {});
+  var s0 = Math.floor(num / 200), t = num % 200;
+  if (d[s0] != null) return d[s0] * 200 + t;              // deja deplacee : on suit
+  var vieux = v.laps[num];
+  if (!vieux || vieux.dureeMs == null || dureeMs == null) return num;
+  if (Math.abs(vieux.dureeMs - dureeMs) < 50) return num;  // le meme tour, simplement renvoye
+  var pris = {};
+  Object.keys(v.laps).forEach(function (n) { pris[Math.floor(n / 200)] = 1; });
+  Object.keys(d).forEach(function (k) { pris[d[k]] = 1; });
+  var s = s0 + 1; while (pris[s] && s < 320) s++;
+  if (s >= 320) { jrn('⚠ ' + v.nom + ' : plus de bande de session libre, le tour ' + num + ' est gardé tel quel'); return num; }
+  d[s0] = s; decalSauver();
+  jrn('⚠ ' + v.nom + ' : le tour ' + num + ' existe déjà avec une autre durée ('
+      + duree(vieux.dureeMs) + ' contre ' + duree(dureeMs) + '). La séance ' + s0
+      + ' qui arrive est rangée en séance ' + s + " — rien n'est écrasé.");
+  return s * 200 + t;
+}
+
+// ---- 4 : LE TRAFIC SE VOIT AU PAPILLON, PAS AU CHRONO ----
+// ⚠ Mesure du 24 sept., sept tours, le pilote a nomme les trois tours ou il etait
+// pris derriere des voitures plus lentes :
+//     tours propres   38,4  38,2  38,1 % de papillon moyen   (mediane 38,2)
+//     tours de trafic 30,4  28,7  28,3 %                     soit -20, -25, -26 %
+// Leurs chronos etaient a +4,4 %, +6,7 % et +5,6 % du meilleur. L'ancien seuil de
+// 10 % ne voyait donc AUCUN des trois. Le papillon les separe sans ambiguite : la
+// vitesse tombe AVEC le pied, dans tous les secteurs, alors que le MAP ne bouge pas.
+var gazCache = {};
+function gazMoyenTour(v, lap) {
+  var cle = v.mac + '|' + lap.num;
+  if (gazCache[cle] !== undefined) return gazCache[cle];
+  gazCache[cle] = null;
+  var k = smartCanal(lap, RE_GAZ); if (k < 0) return null;
+  var ech = canEchantillons(lap); if (!ech.length) return null;
+  var som = 0, n = 0;
+  for (var s = 0; s < ech.length; s++) { var x = canValeur(lap, ech, k, s); if (x != null) { som += x; n++; } }
+  gazCache[cle] = n >= 20 ? som / n : null;
+  return gazCache[cle];
+}
+function gazMedianSeance(v, sn) {
+  var g = [];
+  sn.laps.forEach(function (l, i) {
+    if (i === 0 && sn.laps.length > 1) return;            // le tour de sortie ne fait pas la norme
+    var x = gazMoyenTour(v, l); if (x != null) g.push(x);
+  });
+  return g.length >= 3 ? mediane(g) : null;
+}
+
 function horsAnalyse(v, lap) {
   if (lap.dureeMs == null) return 'sans temps';
   var sn = sessionDe(v, lap); if (!sn) return null;
   if (sn.laps.length > 1 && sn.laps[0] === lap) return 'sortie des puits';
-  if (sn.best && lap !== sn.best && lap.dureeMs > sn.best.dureeMs * 1.10) return 'trafic ou roulage';
+  if (!sn.best || lap === sn.best) return null;
+  var plusLent = lap.dureeMs / sn.best.dureeMs - 1;
+  if (plusLent > 0.10) return 'trafic ou roulage';        // tres loin : la vieille garde suffit
+  // [MT2 v5.3] LA SIGNATURE DU PIED LEVE. Plus lent, et le papillon nettement en dessous
+  // de la seance : la voiture pouvait, le pilote n'a pas pu. Sans le canal du papillon,
+  // aucun verdict -- c'est la regle du pilote.
+  if (plusLent <= 0.02) return null;
+  var g = gazMoyenTour(v, lap), med = gazMedianSeance(v, sn);
+  if (g != null && med != null && g < 0.85 * med) return 'trafic ou levé de pied';
   return null;
 }
 // les virages du circuit, lus dans le tour de reference : on coupe aux points LES PLUS RAPIDES,
@@ -2692,14 +2827,24 @@ function restaurer(fichier) {
   lecteur.onload = function () {
     try {
       var s = JSON.parse(lecteur.result); if (!s || s.format !== 'tracklogics-mt' || !s.voitures) { alert('Ce fichier n\u2019est pas une sauvegarde TRACKLOGICS MT.'); return; }
-      var ajoutes = 0;
+      var ajoutes = 0, deplaces = 0;
       Object.keys(s.voitures).forEach(function (m) {
         var src = s.voitures[m]; if (!voitures[m]) { voitures[m] = { mac: m, nom: src.nom, num: src.num, fw: src.fw, vuMs: 0, idx: null, laps: {}, traces: {} }; ordreVoitures.push(m); }
         else if (src.nom && voitures[m].nom !== src.nom) {   // [MT2 v3.0] le nom du fichier gagne
           voitures[m].nom = src.nom; if (src.num) voitures[m].num = src.num; if (src.fw) voitures[m].fw = src.fw;
         }
         var v = voitures[m];
-        Object.keys(src.laps || {}).forEach(function (n) { if (!v.laps[n]) { v.laps[n] = src.laps[n]; ajoutes++; } if (!v.traces[n] && src.traces && src.traces[n]) v.traces[n] = src.traces[n]; marquer(m, +n); });
+        // [MT2 v5.3] ⚠ UN TOUR QUI ENTRE NE DOIT NI ECRASER NI DISPARAITRE. Avant, un numero
+        // deja pris faisait SILENCIEUSEMENT tomber le tour du fichier. Deux seances numerotees
+        // a partir de 201 -- ce que le kit 28 a fait le 24 sept. 2026 -- perdaient donc tous
+        // leurs tours communs. La seance qui arrive part maintenant dans une bande libre.
+        Object.keys(src.laps || {}).sort(function (x, y) { return x - y; }).forEach(function (n) {
+          var lp = src.laps[n], cible = numSansEcraser(v, +n, lp.dureeMs);
+          if (cible !== +n) { deplaces++; lp = JSON.parse(JSON.stringify(lp)); lp.num = cible; }
+          if (!v.laps[cible]) { v.laps[cible] = lp; ajoutes++; }
+          if (!v.traces[cible] && src.traces && src.traces[n]) v.traces[cible] = src.traces[n];
+          marquer(m, cible);
+        });
         marquer(m, null);
       });
       var fichesRep = 0, pilotesRep = 0;   // [MT2 v1.1] le carnet revient, sans ecraser ce qui est la
@@ -2714,7 +2859,7 @@ function restaurer(fichier) {
       if (fichesRep || pilotesRep) jrn('Restauration : ' + fichesRep + ' fiche(s) et ' + pilotesRep + ' pilote(s) ajoutes');
       nomsAppliquer();   // [MT2 v4.6]
       if (!vueMac && ordreVoitures.length) vueMac = ordreVoitures[0];
-      catsRelier(); sauver(); rendre(); jrn('Restauration : ' + ajoutes + ' tour(s) ajoute(s) depuis ' + fichier.name); alert(ajoutes + ' tour(s) restaure(s). Les tours deja presents sont gardes tels quels.');
+      catsRelier(); sauver(); rendre(); jrn('Restauration : ' + ajoutes + ' tour(s) ajoute(s) depuis ' + fichier.name + (deplaces ? ', dont ' + deplaces + ' range(s) dans une autre seance' : '')); alert(ajoutes + ' tour(s) restaure(s).' + (deplaces ? '\n\n' + deplaces + ' portaient un numero deja pris avec une autre duree : ils sont ranges dans une nouvelle seance, rien n est perdu.' : ' Les tours deja presents sont gardes tels quels.'));
     } catch (e) { alert('Sauvegarde illisible : ' + e.message); }
   };
   lecteur.readAsText(fichier);
