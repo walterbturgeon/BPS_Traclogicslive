@@ -385,6 +385,8 @@
   <div class="row" style="margin-top:8px"><button class="btn sec" id="btnVitCoul" onclick="vitInverseBascule()">Vitesse : rouge = lent</button><span class="small" id="vitCoulNote"></span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" id="btnBords" onclick="bordsSuivant()">Bords : faible</button><span class="small" id="bordsNote"></span></div>
   <div class="small aide" style="opacity:.7;margin-top:4px">Une dalle n’éclaire pas ses bords comme son centre. Monte le cran jusqu’à ce que le défaut de la tienne ne se voie plus.</div>
+  <div class="row" style="margin-top:8px"><button class="btn sec" onclick="bornesRefaire()">Refaire les secteurs du circuit</button><span class="small" id="bornesNote"></span></div>
+  <div class="small aide" style="opacity:.7;margin-top:4px">Les secteurs sont posés une fois par circuit, sur la vitesse médiane de tes tours, puis gardés. C’est ce qui rend deux séances comparables. Refais-les si tu changes de tracé.</div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="demoCharger()">Démonstration</button><span class="small aide" style="opacity:.75">Des tours d'exemple, sans voiture ni collecteur.</span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="sauvegarder()">Sauvegarder (fichier)</button><button class="btn sec" onclick="document.getElementById('fichierRestaure').click()">Restaurer</button><input type="file" id="fichierRestaure" accept=".json,application/json" style="display:none" onchange="restaurer(this.files[0]); this.value=''"></div>
   <div class="small" id="memEtat" style="margin-top:6px"></div>
@@ -486,7 +488,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.1';
+var PAGE_VER = 'TRACLOGICS v5.2';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -766,7 +768,9 @@ function cafeStats(v, sn) {
   var pts = traceEntiere(v.traces[out.bestLap.num]), m = pts.length ? circuitPourTour(out.bestLap, pts) : null;
   if (m) {
     var tr = v.traces[out.bestLap.num];
-    var r = secteursCalculer(out.bestLap, pts, m, secteursN, tr.intervalMs, null);
+    // [MT2 v5.2] ⚠ les bornes DU CIRCUIT, pas N parts egales : sans elles, deux seances
+    // se comparaient sur des decoupages differents et « S3 » changeait de virage.
+    var r = secteursCalculer(out.bestLap, pts, m, secteursN, tr.intervalMs, bornesCircuit(m.c.id));
     if (r) {
       out.sect = r.sect; out.bornes = r.bornes; out.circuit = m.c.nom;
       out.stats = smartStats(out.bestLap, pts, r, tr, m);   // [MT2 v1.2] freinage, point lent, chemin, gaz
@@ -1092,10 +1096,11 @@ function mapPaires(v, lap) {
   if (kg < 0 || km < 0 || kr < 0) return [];
   var tr = v.traces[lap.num], pts = traceEntiere(tr); if (!pts.length) return [];
   var ech = canEchantillons(lap), inter = (tr && tr.intervalMs) || 500, tenue = 0, out = [];
+  var pasTenue = Math.max(2, Math.ceil(2000 / inter));   // [MT2 v5.2] la meme regle que smartStats
   for (var i = 0; i < pts.length; i++) {
     var t = i * inter, g = canValeurA(lap, ech, kg, t);
     tenue = (g != null && g >= 70) ? tenue + 1 : 0;
-    if (tenue < 4) continue;                       // 2 s de demande tenue : le turbo a le temps
+    if (tenue < pasTenue) continue;                // 2 s de demande tenue : le turbo a le temps
     var m = canValeurA(lap, ech, km, t), r = canValeurA(lap, ech, kr, t);
     if (m != null && r != null && r > 1500) out.push({ rpm: r, map: m });
   }
@@ -2253,17 +2258,43 @@ function horsAnalyse(v, lap) {
 // pour qu'une section porte un virage entier (freinage, corde, sortie).
 var smartBornes = {};
 var smartSectionVue = null;   // [v66] {i0, i1, couleur} : la section que la carte doit montrer
-function smartVirages(v, ref, m) {
-  var cle = m.c.id + '|' + ref.num;
-  if (smartBornes[cle] !== undefined) return smartBornes[cle];
-  smartBornes[cle] = null;
-  var pr = traceEntiere(v.traces[ref.num]), mr = circuitPourTour(ref, pr);
-  if (!mr || mr.c.id !== m.c.id) return null;
-  var rr = secteursCalculer(ref, pr, mr, 1, v.traces[ref.num].intervalMs);
-  if (!rr || !rr.r) return null;
-  var r = rr.r, L = rr.L, n = pr.length;
+// =====================================================================
+// [MT2 v5.2] LES SECTEURS DU CIRCUIT, POSES UNE FOIS ET GARDES
+// =====================================================================
+// ⚠ LE DEFAUT QU'ON CORRIGE ICI. Les bornes venaient des creux de vitesse D'UN TOUR.
+// Chaque tour posait donc les siennes, au point ou SA vitesse avait culmine. Mesure du
+// 24 sept. 2026, cinq tours de la meme seance :
+//     tour 2 : 1807,0  2722,4  3251,4  3670,0 m
+//     tour 4 : 1824,7  2794,2  3258,4  3722,7 m
+// La section 2 du tour 4 etait 54 m plus longue que celle du tour 2. Comparer leurs
+// chronos ne voulait rien dire, et « S3 » ne designait pas le meme virage deux fois.
+//
+// ⚠ POURQUOI LA MEDIANE. Un sommet de vitesse est plat, et la trace ne porte que 138
+// points -- un tous les 31 m, jusqu'a 55 m. Le point le plus rapide bascule donc d'un
+// echantillon a l'autre. La mediane de plusieurs tours, sur une grille fixe de 10 m, ne
+// bascule plus : on lit le CIRCUIT, plus le tour.
+//
+// Une fois trouvees, les bornes sont GARDEES dans l'appareil, par circuit. Elles valent
+// alors pour toutes les seances, toutes les journees et toutes les voitures -- ce qui
+// rend le Coffee break capable de comparer deux seances section par section.
+
+var PAS_GRILLE_M = 10;
+var bornesFixes = (function () {
+  try { return JSON.parse(localStorage.getItem('mt2_bornes') || '{}') || {}; } catch (e) { return {}; }
+})();
+var bornesEssai = {};   // circuit -> nombre de tours vus au dernier essai manque
+function bornesSauver() { try { localStorage.setItem('mt2_bornes', JSON.stringify(bornesFixes)); } catch (e) {} }
+function toursTotal() { var n = 0; Object.keys(voitures).forEach(function (m) { n += Object.keys(voitures[m].laps).length; }); return n; }
+
+// L'ALGORITHME, UN SEUL, pour les deux entrees : on coupe aux points LES PLUS RAPIDES,
+// pour qu'une section porte un virage entier (freinage, corde, sortie).
+function bornesDepuisProfil(kmh, r, L) {
+  var n = kmh.length; if (n < 20) return null;
   var vit = [], somme = 0;
-  for (var i = 0; i < n; i++) { var a = pr[Math.max(0, i - 1)].kmh, b = pr[i].kmh, c = pr[Math.min(n - 1, i + 1)].kmh; vit.push((a + b + c) / 3); somme += pr[i].kmh; }
+  for (var i = 0; i < n; i++) {
+    var a = kmh[Math.max(0, i - 1)], b = kmh[i], c = kmh[Math.min(n - 1, i + 1)];
+    vit.push((a + b + c) / 3); somme += kmh[i];
+  }
   var moy = somme / n;
   var creux = [];
   for (var i2 = 2; i2 < n - 2; i2++) if (vit[i2] <= vit[i2 - 1] && vit[i2] <= vit[i2 + 1] && vit[i2] < moy * 0.92) {
@@ -2281,7 +2312,85 @@ function smartVirages(v, ref, m) {
     if (r[mx] > 20 && r[mx] < L - 20) bornes.push(r[mx]);
   }
   bornes = bornes.filter(function (x, i4, t) { return i4 === 0 || x - t[i4 - 1] > 80; });
-  smartBornes[cle] = bornes.length ? bornes : null;
+  return bornes.length ? bornes : null;
+}
+
+// LE PROFIL MEDIAN DU CIRCUIT : tous les tours de toutes les voitures, remis sur une
+// grille de 10 m depuis la ligne, puis la mediane case par case.
+function profilCircuit(circId) {
+  var col = null, L = 0, nTours = 0;
+  Object.keys(voitures).forEach(function (mac) {
+    var v = voitures[mac];
+    Object.keys(v.laps).forEach(function (n) {
+      var lap = v.laps[n]; if (lap.dureeMs == null) return;
+      var tr = v.traces[n], pts = traceEntiere(tr); if (pts.length < 20 || !tr) return;
+      if (horsAnalyse(v, lap)) return;              // pas de tour de sortie des puits dans le modele
+      var m = circuitPourTour(lap, pts); if (!m || m.c.id !== circId) return;
+      var rr = secteursCalculer(lap, pts, m, 1, tr.intervalMs);
+      if (!rr || !rr.r) return;
+      if (!col) { L = rr.L; var N = Math.max(40, Math.round(L / PAS_GRILLE_M)); col = []; for (var i = 0; i < N; i++) col.push([]); }
+      nTours++;
+      for (var i2 = 0; i2 < pts.length; i2++) {
+        var k = Math.floor(rr.r[i2] / L * col.length);
+        if (k >= 0 && k < col.length) col[k].push(pts[i2].kmh);
+      }
+    });
+  });
+  if (!col || nTours < 2) return null;              // un seul tour ne fait pas une mediane
+  // la mediane par case ; une case vide prend la voisine (en avant, puis en arriere)
+  var med = col.map(function (c) {
+    if (!c.length) return null;
+    c.sort(function (a, b) { return a - b; });
+    return c[Math.floor(c.length / 2)];
+  });
+  var der = null;
+  for (var i3 = 0; i3 < med.length; i3++) { if (med[i3] == null) med[i3] = der; else der = med[i3]; }
+  der = null;
+  for (var i4 = med.length - 1; i4 >= 0; i4--) { if (med[i4] == null) med[i4] = der; else der = med[i4]; }
+  if (med.some(function (x) { return x == null; })) return null;
+  var r = med.map(function (_, i5) { return (i5 + 0.5) * L / med.length; });
+  return { kmh: med, r: r, L: L, tours: nTours };
+}
+
+// les bornes du circuit : gardees si on les a, sinon calculees puis gardees
+function bornesCircuit(circId) {
+  if (bornesFixes[circId] && bornesFixes[circId].length) return bornesFixes[circId];
+  var vus = toursTotal();
+  if (bornesEssai[circId] === vus) return null;     // rien de neuf depuis le dernier essai
+  bornesEssai[circId] = vus;
+  var p = profilCircuit(circId); if (!p) return null;
+  var b = bornesDepuisProfil(p.kmh, p.r, p.L); if (!b) return null;
+  bornesFixes[circId] = b; bornesSauver();
+  jrn('Secteurs du circuit poses et gardes : ' + (b.length + 1) + ' sections, bâties sur '
+      + p.tours + ' tour(s) — elles ne bougeront plus');
+  return b;
+}
+// ⚠ ce que le doigt efface : on recalcule au prochain rendu, avec les tours d'aujourd'hui
+function bornesRefaire() {
+  var n = Object.keys(bornesFixes).length;
+  bornesFixes = {}; bornesEssai = {}; bornesSauver();
+  smartBornes = {}; smartCacheStats = {};
+  jrn('Secteurs effacés (' + n + ' circuit(s)) : ils se refont au prochain tour affiché.');
+  rendre();
+}
+// LE CHOIX, partout : les bornes du circuit d'abord ; sans elles, l'ancienne regle
+function bornesPourTour(v, lap, m) {
+  var b = bornesCircuit(m.c.id);
+  if (b && b.length) return b;
+  var refB = compReference(v, lap) || lap;
+  return smartVirages(v, refB, m);
+}
+
+function smartVirages(v, ref, m) {
+  var cle = m.c.id + '|' + ref.num;
+  if (smartBornes[cle] !== undefined) return smartBornes[cle];
+  smartBornes[cle] = null;
+  var pr = traceEntiere(v.traces[ref.num]), mr = circuitPourTour(ref, pr);
+  if (!mr || mr.c.id !== m.c.id) return null;
+  var rr = secteursCalculer(ref, pr, mr, 1, v.traces[ref.num].intervalMs);
+  if (!rr || !rr.r) return null;
+  // [MT2 v5.2] le meme algorithme que les bornes du circuit, ecrit une seule fois
+  smartBornes[cle] = bornesDepuisProfil(pr.map(function (p) { return p.kmh; }), rr.r, rr.L);
   return smartBornes[cle];
 }
 // [v49] LES QUATRE FAITS D'UNE SECTION. Tout le conseil de pilotage en sort :
@@ -2301,7 +2410,13 @@ function smartStats(lap, pts, res, trace, m) {
   for (var j = 0; j < N; j++) { out.push({ kmhMin: null, iMin: -1, sg: 0, ng: 0, sr: 0, nr: 0, chemin: 0, freinage: null, gazPt: null, vSortie: null, sl: 0, nl: 0, lat: null,
     sm: 0, nm: 0, map: null, vEntree: null, vMoy: null,
     smP: 0, srP: 0, nP: 0, mapPlein: null, rpmPlein: null }); par.push([]); }   // [MT2 v1.5] a forte demande seulement
-  var tenue = 0;   // [MT2 v1.7] pas de 500 ms : 4 pas = 2 s de demande tenue
+  // [MT2 v5.2] ⚠ LE COMPTE SUIT LE PAS REEL, il ne vaut plus 4 en dur. Le commentaire
+  // disait « 4 pas = 2 s » en supposant 500 ms. Mesure sur le vrai boitier le 24 sept. 2026 :
+  // le pas vaut 861 a 875 ms, donc 4 pas faisaient 3,45 s. Le filtre jetait les trois premiers
+  // points de CHAQUE relance -- 19 points retenus la ou le papillon passait 33 s au-dessus de
+  // 70 %. On demande maintenant 2 s de demande, quel que soit le pas.
+  var pasTenue = Math.max(2, Math.ceil(2000 / (trace.intervalMs || 500)));
+  var tenue = 0;
   for (var i = 0; i < pts.length; i++) {
     var j2 = 0; while (j2 < res.bornes.length && res.r[i] >= res.bornes[j2]) j2++;
     var k = Math.min(j2, N - 1), o = out[k];
@@ -2323,7 +2438,7 @@ function smartStats(lap, pts, res, trace, m) {
       // deux. Un instant de pleine demande ne dit donc rien. On ne garde que la demande TENUE :
       // au moins 2 s de papillon a 70 % ou plus, le temps que la pression s'etablisse.
       tenue = (gp != null && gp >= 70) ? tenue + 1 : 0;
-      if (gp != null && gp >= 70 && tenue >= 4 && mp != null) {
+      if (gp != null && gp >= 70 && tenue >= pasTenue && mp != null) {
         var rp = rpm >= 0 ? canValeurA(lap, ech, rpm, t) : null;
         o.smP += mp; o.srP += (rp == null ? 0 : rp); o.nP++;
       }
@@ -3320,8 +3435,7 @@ function expoPosA(pts, inter, tMs) {
 }
 // les bornes de secteur que la page utilise EN CE MOMENT, pour ce tour
 function expoBornes(v, lap, m) {
-  var refB = smartOn ? (compReference(v, lap) || lap) : null;
-  return refB ? smartVirages(v, refB, m) : null;
+  return smartOn ? bornesPourTour(v, lap, m) : null;   // [MT2 v5.2] la meme source que l ecran
 }
 function expoSecteurs1(v, lap) {   // {res, stats, m, bornesV, pts, inter} ou null
   var tr = v.traces[lap.num], pts = traceEntiere(tr);
@@ -3804,8 +3918,7 @@ function circuitRendre(v, lap) {
   if (!m) return;
   var tr = v.traces[lap.num];
   // [v44] en smart, les bornes suivent les virages, lus dans le tour de reference
-  var refB = smartOn ? (compReference(v, lap) || lap) : null;
-  var bornesV = refB ? smartVirages(v, refB, m) : null;
+  var bornesV = smartOn ? bornesPourTour(v, lap, m) : null;   // [MT2 v5.2] posees une fois, gardees
   var res = secteursCalculer(lap, pts, m, secteursN, tr.intervalMs, bornesV);
   bloc.style.display = '';
   document.getElementById('circNom').textContent = m.c.nom;
