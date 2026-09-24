@@ -498,7 +498,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.5';
+var PAGE_VER = 'TRACLOGICS v5.6';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -2337,23 +2337,36 @@ function numRemap(v, num) {
   return (s == null) ? num : s * 200 + (num % 200);
 }
 // decide, au vu du resume : meme numero + autre duree = autre seance
+// deux tours de meme numero et de meme duree sont LE MEME TOUR, a 50 ms pres
+function memeTour(l, dureeMs) {
+  return !!(l && l.dureeMs != null && dureeMs != null && Math.abs(l.dureeMs - dureeMs) < 50);
+}
 function numSansEcraser(v, num, dureeMs) {
   var d = sessionDecal[v.mac] || (sessionDecal[v.mac] = {});
   var s0 = Math.floor(num / 200), t = num % 200;
-  if (d[s0] != null) return d[s0] * 200 + t;              // deja deplacee : on suit
-  var vieux = v.laps[num];
-  if (!vieux || vieux.dureeMs == null || dureeMs == null) return num;
-  if (Math.abs(vieux.dureeMs - dureeMs) < 50) return num;  // le meme tour, simplement renvoye
-  var pris = {};
-  Object.keys(v.laps).forEach(function (n) { pris[Math.floor(n / 200)] = 1; });
-  Object.keys(d).forEach(function (k) { pris[d[k]] = 1; });
-  var s = s0 + 1; while (pris[s] && s < 320) s++;
-  if (s >= 320) { jrn('⚠ ' + v.nom + ' : plus de bande de session libre, le tour ' + num + ' est gardé tel quel'); return num; }
-  d[s0] = s; decalSauver();
-  jrn('⚠ ' + v.nom + ' : le tour ' + num + ' existe déjà avec une autre durée ('
-      + duree(vieux.dureeMs) + ' contre ' + duree(dureeMs) + '). La séance ' + s0
-      + ' qui arrive est rangée en séance ' + s + " — rien n'est écrasé.");
-  return s * 200 + t;
+  // 1. ⚠ UN REJEU RESTE CHEZ LUI. L'ancienne garde rendait tout de suite la bande
+  //    deplacee, sans regarder la duree : quand la passerelle a rejoue les tours 206 a 210
+  //    de la seance de 13 h, ils sont partis en 606 a 610 -- cinq DOUBLONS, memes durees a
+  //    la milliseconde. On regarde donc la duree AVANT la bande.
+  if (memeTour(v.laps[num], dureeMs)) return num;
+  // 2. on part de la bande de cette seance -- deplacee ou non -- et on avance jusqu'a une
+  //    place LIBRE ou qui porte deja ce tour. ⚠ ON VERIFIE TOUJOURS LA PLACE D'ARRIVEE :
+  //    suivre une bande sans regarder a ECRASE un tour le 24 sept. Le tour 1 d'une nouvelle
+  //    seance (169,158 s) a pris la place du tour deplace de la seance d'avant (153,480 s),
+  //    en gardant son heure de reception.
+  var depart = (d[s0] != null) ? d[s0] : s0;
+  for (var q = depart; q < 320; q++) {
+    var c = q * 200 + t;
+    if (!v.laps[c] || memeTour(v.laps[c], dureeMs)) {
+      if (q !== s0) { d[s0] = q; decalSauver(); }
+      if (c !== num) jrn('⚠ ' + v.nom + ' : le tour ' + num + ' est déjà pris par un autre tour ('
+          + (v.laps[num] ? duree(v.laps[num].dureeMs) : '?') + ' contre ' + duree(dureeMs)
+          + '). Celui qui arrive est rangé en séance ' + q + " — rien n'est écrasé.");
+      return c;
+    }
+  }
+  jrn('⚠ ' + v.nom + ' : plus de bande de séance libre, le tour ' + num + ' est gardé tel quel');
+  return num;
 }
 
 // ---- 4 : LE TRAFIC SE VOIT AU PAPILLON, PAS AU CHRONO ----
@@ -2849,12 +2862,33 @@ function restaurer(fichier) {
         // deja pris faisait SILENCIEUSEMENT tomber le tour du fichier. Deux seances numerotees
         // a partir de 201 -- ce que le kit 28 a fait le 24 sept. 2026 -- perdaient donc tous
         // leurs tours communs. La seance qui arrive part maintenant dans une bande libre.
+        // [MT2 v5.6] ⚠ UNE SEANCE SE DEPLACE D'UN BLOC. Decider tour par tour coupait la
+        // seance en deux : le 24 sept., le tour 1 du matin a trouve sa place libre et y est
+        // reste, melange a la seance de 13 h, pendant que ses tours 2 a 5 partaient ailleurs.
+        // Ici on a tout le fichier : on prend la premiere bande ou CHACUN de ses tours tient.
+        var parBande = {};
         Object.keys(src.laps || {}).sort(function (x, y) { return x - y; }).forEach(function (n) {
-          var lp = src.laps[n], cible = numSansEcraser(v, +n, lp.dureeMs);
-          if (cible !== +n) { deplaces++; lp = JSON.parse(JSON.stringify(lp)); lp.num = cible; }
-          if (!v.laps[cible]) { v.laps[cible] = lp; ajoutes++; }
-          if (!v.traces[cible] && src.traces && src.traces[n]) v.traces[cible] = src.traces[n];
-          marquer(m, cible);
+          (parBande[Math.floor(+n / 200)] = parBande[Math.floor(+n / 200)] || []).push(+n);
+        });
+        Object.keys(parBande).map(Number).sort(function (x, y) { return x - y; }).forEach(function (s0) {
+          var groupe = parBande[s0], dec = 0;
+          for (var q = s0; q < 320; q++) {
+            var tient = groupe.every(function (n) {
+              var c = q * 200 + (n % 200);
+              return !v.laps[c] || memeTour(v.laps[c], src.laps[n].dureeMs);
+            });
+            if (tient) { dec = q - s0; break; }
+          }
+          groupe.forEach(function (n) {
+            var lp = src.laps[n], cible = n + dec * 200;
+            if (cible !== n) { deplaces++; lp = JSON.parse(JSON.stringify(lp)); lp.num = cible; }
+            if (!v.laps[cible]) { v.laps[cible] = lp; ajoutes++; }
+            if (!v.traces[cible] && src.traces && src.traces[n]) v.traces[cible] = src.traces[n];
+            marquer(m, cible);
+          });
+          if (dec) jrn('\u26a0 ' + (v.nom || m) + ' : la s\u00e9ance ' + s0 + ' du fichier porte des num\u00e9ros '
+                     + 'd\u00e9j\u00e0 pris. Ses ' + groupe.length + ' tour(s) sont rang\u00e9s d\u2019un bloc en s\u00e9ance '
+                     + (s0 + dec) + " \u2014 rien n'est \u00e9cras\u00e9 ni coup\u00e9.");
         });
         marquer(m, null);
       });
@@ -3053,6 +3087,51 @@ var sessionsRepliees = {};   // ce que le doigt a replie, garde d'un rendu a l'a
 // chargement, avec le meme signal : un tour recu AVANT le debut d'une seance n'en fait
 // pas partie. La seance qui commence plus tard part dans une bande libre, avec ses tours
 // suivants tant qu'ils ont ete recus apres son depart.
+// ⚠ ET ON RETIRE LES DOUBLONS DEJA RANGES. Le trou d'avant en a fabrique cinq dans la
+// tablette du pilote. Deux tours sont le MEME tour quand ils portent le meme numero de tour
+// (n modulo 200), la meme duree a 50 ms pres, ET une trace de meme longueur. Les trois
+// ensemble : une coincidence sur les trois est hors de portee. On garde celui de la bande
+// la plus basse -- l'original -- et on dit ce qu'on enleve.
+function doublonsRetirer(v) {
+  // deux traces sont la meme quand la plus courte est le DEBUT EXACT de la plus longue.
+  // ⚠ Une salve peut etre coupee : le tour 608 du 24 sept. portait 92 points sur 138,
+  // tous identiques a ceux du tour 208, et aucun canal. Exiger la meme longueur le laissait
+  // passer pour un tour a part.
+  function memeTrace(a, b) {
+    var n = Math.min(a.length, b.length);
+    if (n < 10) return false;
+    for (var i = 0; i < n; i++)
+      if (a[i].dx !== b[i].dx || a[i].dy !== b[i].dy || a[i].kmh !== b[i].kmh) return false;
+    return true;
+  }
+  function richesse(v2, n) {
+    var c = (v2.laps[n] && v2.laps[n].can) || null, sec = 0;
+    if (c) Object.keys(c.parts).forEach(function (p) { sec += (c.parts[p].rows || []).length; });
+    return traceEntiere(v2.traces[n]).length + sec;
+  }
+  var nums = Object.keys(v.laps).map(Number).sort(function (a, b) { return a - b; });
+  var retires = 0;
+  for (var a = 0; a < nums.length; a++) {
+    var na = nums[a], la = v.laps[na];
+    if (!la || la.dureeMs == null) continue;
+    for (var b = a + 1; b < nums.length; b++) {
+      var nb = nums[b], lb = v.laps[nb];
+      if (!lb || lb.dureeMs == null) continue;
+      if (na % 200 !== nb % 200) continue;
+      if (Math.abs(la.dureeMs - lb.dureeMs) >= 50) continue;
+      if (!memeTrace(traceEntiere(v.traces[na]), traceEntiere(v.traces[nb]))) continue;
+      // on garde le plus complet ; a egalite, le plus ancien numero
+      var garde = richesse(v, nb) > richesse(v, na) ? nb : na;
+      var jette = (garde === na) ? nb : na;
+      jrn('⚠ ' + v.nom + ' : le tour ' + jette + ' est le même que le tour ' + garde
+          + ' (' + duree(la.dureeMs) + ', même trace). Le moins complet est retiré.');
+      delete v.laps[jette]; delete v.traces[jette]; marquer(v.mac, jette); retires++;
+      if (jette === na) break;                 // celui de la boucle externe est parti
+      nums[b] = -1;                            // deja traite
+    }
+  }
+  return retires;
+}
 function seancesDemeler(v) {
   var faits = 0;
   Object.keys(v.laps).map(Number).sort(function (a, b) { return a - b; }).forEach(function (n) {
@@ -3083,6 +3162,7 @@ function catsRelier() {
     Object.keys(v.laps).forEach(function (n) { var l = v.laps[n]; if (l.cat) v.cats[lapSessionCle(l)] = l.cat; });
     Object.keys(v.laps).forEach(function (n) { var l = v.laps[n]; if (!l.cat && v.cats[lapSessionCle(l)]) l.cat = v.cats[lapSessionCle(l)]; });
     seancesDemeler(v);   // [MT2 v5.4] deux seances dans une meme bande : on les separe
+    doublonsRetirer(v);  // [MT2 v5.6] et les doublons fabriques par l ancienne garde
   });
 }
 function rendre() {   // [v17] la position verticale est gardee : seul le doigt fait defiler
