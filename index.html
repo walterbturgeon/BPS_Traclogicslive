@@ -141,6 +141,7 @@
     --warn:#FF4757;        /* rouge : pire, ou limite atteinte */
     --ambre:#FFB020;       /* ambre : un record */
     --bleu:#3D8BFF;        /* bleu : meteo, densite */
+    --sel:#1D5FCC;         /* [MT2 v3.7] bleu de selection : la voiture vue */
     --violet:#A55EEA;      /* violet : reglages, ingenieur */
   }
   /* [MT2 v3.2] LE MEME HABILLAGE, EN CLAIR. Les couleurs vives du fond sombre
@@ -155,13 +156,14 @@
     --ambre:#9A6407;
     --bleu:#1A62CC;
     --violet:#6E34C4;
+    --sel:#1A62CC;         /* [MT2 v3.7] */
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
       --bg:#EFF1F5; --card:#FFFFFF; --tab:#E3E7EE; --toile:#F6F7FA;
       --ink:#0E1116; --muted:#5A6373; --line:#D5DAE3;
       --accent:#D6430D; --ok:#0B8F45; --warn:#C4232F;
-      --ambre:#9A6407; --bleu:#1A62CC; --violet:#6E34C4;
+      --ambre:#9A6407; --bleu:#1A62CC; --violet:#6E34C4; --sel:#1A62CC;
     }
   }
   body { background:var(--bg); color:var(--ink);
@@ -171,10 +173,10 @@
   header h1, header .titre, header b { letter-spacing:.14em; text-transform:uppercase; font-weight:800; }
   .ver { color:var(--muted); font-size:.72em; letter-spacing:.06em; text-transform:uppercase; }
   /* [MT2 v3.4] le fondu du pourtour : mode clair seulement */
-  .vignette { position:fixed; inset:0; pointer-events:none; z-index:60; display:none; }
-  .vignette.b1 { display:block; box-shadow:inset 0 0  60px  6px rgba(0,0,0,.17); }
-  .vignette.b2 { display:block; box-shadow:inset 0 0  95px 10px rgba(0,0,0,.27); }
-  .vignette.b3 { display:block; box-shadow:inset 0 0 135px 16px rgba(0,0,0,.38); }
+  /* [MT2 v3.8] le fondu se pilote par trois variables, posees en JS */
+  .vignette { position:fixed; inset:0; pointer-events:none; z-index:60; display:none;
+              box-shadow:inset 0 0 var(--vigFlou,60px) var(--vigEtal,6px) rgba(0,0,0,var(--vigNoir,0)); }
+  .vignette.allume { display:block; }
   .fige { background:var(--bg); box-shadow:0 6px 18px rgba(0,0,0,.45); }
   :root[data-theme="light"] .fige { box-shadow:0 6px 18px rgba(0,0,0,.12); }
   @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .fige { box-shadow:0 6px 18px rgba(0,0,0,.12); } }
@@ -197,8 +199,9 @@
                 text-transform:uppercase; letter-spacing:.06em; }
   /* les onglets des voitures : pastilles, la voiture vue en orange plein */
   .tab { background:var(--tab); border:1px solid var(--line); border-radius:999px; padding:9px 16px; }
-  .tab.on { background:var(--accent); border-color:var(--accent); color:#120800; }
-  .tab.on .sub, .tab.on .nom { color:#120800; }
+  .tab.on { background:var(--sel); border-color:var(--sel); color:#fff; }
+  .tab.on .sub, .tab.on .nom { color:#fff; }
+  .tab.on .portee { background:#fff; }
   /* les pastilles de session et les tableaux */
   details.session > summary { letter-spacing:.02em; }
   table th { color:var(--muted); font-size:.72em; letter-spacing:.1em; text-transform:uppercase; font-weight:700; }
@@ -376,7 +379,7 @@
 <div class="card" style="margin:0 0 10px">
   <div class="row"><button class="btn sec" id="btnDetails" onclick="detailsBascule()">Détails</button><span class="small">Numéros de série (MAC) et versions des boîtes.</span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" id="btnVitCoul" onclick="vitInverseBascule()">Vitesse : rouge = lent</button><span class="small" id="vitCoulNote"></span></div>
-  <div class="row" style="margin-top:8px"><button class="btn sec" id="btnBords" onclick="bordsSuivant()">Bords : léger</button><span class="small" id="bordsNote"></span></div>
+  <div class="row" style="margin-top:8px"><span class="small">Bords</span><input type="range" id="curBords" min="0" max="100" step="5" style="flex:1;min-width:140px" oninput="bordsPoser(this.value)"><span class="small" id="bordsNote" style="min-width:48px"></span></div>
   <div class="small aide" style="opacity:.7;margin-top:4px">Une dalle n’éclaire pas ses bords comme son centre. Monte le cran jusqu’à ce que le défaut de la tienne ne se voie plus.</div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="demoCharger()">Démonstration</button><span class="small aide" style="opacity:.75">Des tours d'exemple, sans voiture ni collecteur.</span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="sauvegarder()">Sauvegarder (fichier)</button><button class="btn sec" onclick="document.getElementById('fichierRestaure').click()">Restaurer</button><input type="file" id="fichierRestaure" accept=".json,application/json" style="display:none" onchange="restaurer(this.files[0]); this.value=''"></div>
@@ -489,7 +492,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v3.6';
+var PAGE_VER = 'TRACLOGICS v3.8';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -2724,19 +2727,29 @@ function vitInverseBascule() {
   vitInverseMaj(); rendre();
 }
 // [MT2 v3.6] le fondu des bords : 0 aucun, 1 leger, 2 moyen, 3 fort
-var BORDS_NOMS = ['aucun', 'léger', 'moyen', 'fort'], bordsN = 1;
-try { var b0 = localStorage.getItem('mt2_bords'); if (b0 !== null) bordsN = Math.max(0, Math.min(3, +b0 || 0)); } catch (e) {}
-function bordsSuivant() {
-  bordsN = (bordsN + 1) % 4;
-  try { localStorage.setItem('mt2_bords', String(bordsN)); } catch (e) {}
+var bordsN = 25;   // 0 a 100
+try {
+  var b0 = localStorage.getItem('mt2_bordspc');
+  if (b0 !== null) bordsN = Math.max(0, Math.min(100, +b0 || 0));
+  else { var vieux = localStorage.getItem('mt2_bords');   // [MT2 v3.8] les anciens crans
+         if (vieux !== null) bordsN = [0, 25, 45, 65][Math.max(0, Math.min(3, +vieux || 0))]; }
+} catch (e) {}
+function bordsPoser(val) {
+  bordsN = Math.max(0, Math.min(100, +val || 0));
+  try { localStorage.setItem('mt2_bordspc', String(bordsN)); } catch (e) {}
   bordsMaj();
 }
 function bordsMaj() {
-  var v = document.querySelector('.vignette');
-  if (v) v.className = 'vignette' + (bordsN ? ' b' + bordsN : '');
-  var b = document.getElementById('btnBords'); if (b) b.textContent = 'Bords : ' + BORDS_NOMS[bordsN];
+  var v = document.querySelector('.vignette'); if (!v) return;
+  var u = bordsN / 100;
+  var r = document.documentElement.style;
+  r.setProperty('--vigFlou', Math.round(40 + 300 * u) + 'px');
+  r.setProperty('--vigEtal', Math.round(4 + 80 * u) + 'px');
+  r.setProperty('--vigNoir', (0.72 * u).toFixed(3));
+  v.classList.toggle('allume', bordsN > 0);
+  var c = document.getElementById('curBords'); if (c && +c.value !== bordsN) c.value = bordsN;
   var n = document.getElementById('bordsNote');
-  if (n) n.textContent = bordsN ? 'Assombrit le pourtour de l\u2019écran.' : 'Le pourtour n\u2019est pas retouché.';
+  if (n) n.textContent = bordsN ? bordsN + ' %' : 'aucun';
 }
 function vitInverseMaj() {
   var b = document.getElementById('btnVitCoul'); if (!b) return;
