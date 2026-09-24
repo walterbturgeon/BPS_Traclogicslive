@@ -170,6 +170,12 @@
   header { padding:14px 16px 10px; }
   header h1, header .titre, header b { letter-spacing:.14em; text-transform:uppercase; font-weight:800; }
   .ver { color:var(--muted); font-size:.72em; letter-spacing:.06em; text-transform:uppercase; }
+  /* [MT2 v3.4] le fondu du pourtour : mode clair seulement */
+  .vignette { position:fixed; inset:0; pointer-events:none; z-index:60; display:none; }
+  :root[data-theme="light"] .vignette { display:block; box-shadow:inset 0 0 60px 6px rgba(0,0,0,.17); }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) .vignette { display:block; box-shadow:inset 0 0 60px 6px rgba(0,0,0,.17); }
+  }
   .fige { background:var(--bg); box-shadow:0 6px 18px rgba(0,0,0,.45); }
   :root[data-theme="light"] .fige { box-shadow:0 6px 18px rgba(0,0,0,.12); }
   @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .fige { box-shadow:0 6px 18px rgba(0,0,0,.12); } }
@@ -259,6 +265,7 @@
 </style>
 </head>
 <body>
+<div class="vignette" aria-hidden="true"></div>
 <div class="fige">   <!-- [v24] entete, connexion et onglets : toujours visibles -->
 <header>
   <h1>TRACLOGICS Live</h1>
@@ -481,7 +488,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v3.3';
+var PAGE_VER = 'TRACLOGICS v3.4';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
