@@ -369,6 +369,7 @@
     <span class="small" id="themeNom"></span></div>
 <div class="card" style="margin:0 0 10px">
   <div class="row"><button class="btn sec" id="btnDetails" onclick="detailsBascule()">Détails</button><span class="small">Numéros de série (MAC) et versions des boîtes.</span></div>
+  <div class="row" style="margin-top:8px"><button class="btn sec" id="btnVitCoul" onclick="vitInverseBascule()">Vitesse : rouge = lent</button><span class="small" id="vitCoulNote"></span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="demoCharger()">Démonstration</button><span class="small aide" style="opacity:.75">Des tours d'exemple, sans voiture ni collecteur.</span></div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="sauvegarder()">Sauvegarder (fichier)</button><button class="btn sec" onclick="document.getElementById('fichierRestaure').click()">Restaurer</button><input type="file" id="fichierRestaure" accept=".json,application/json" style="display:none" onchange="restaurer(this.files[0]); this.value=''"></div>
   <div class="small" id="memEtat" style="margin-top:6px"></div>
@@ -480,7 +481,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v3.2';
+var PAGE_VER = 'TRACLOGICS v3.3';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -2701,7 +2702,25 @@ function angleMax(pts, w, h) {
   if (cn < -1e-6 || (Math.abs(cn) <= 1e-6 && sn < 0)) t += Math.PI;
   return t;
 }
-function couleur(kmh, min, max) { var u = max > min ? (kmh - min) / (max - min) : 0.5; return 'hsl(' + (140 - 140 * Math.max(0, Math.min(1, u))) + ', 85%, 50%)'; }
+var vitInverse = false;   // [MT2 v3.3] false : rouge = lent. true : vert = lent.
+try { vitInverse = localStorage.getItem('mt2_vitinv') === '1'; } catch (e) {}
+function couleur(kmh, min, max) {
+  var u = max > min ? (kmh - min) / (max - min) : 0.5;
+  u = Math.max(0, Math.min(1, u));
+  var t = vitInverse ? 140 - 140 * u : 140 * u;   // 0 = rouge, 140 = vert
+  return 'hsl(' + t + ', 85%, 50%)';
+}
+function vitInverseBascule() {
+  vitInverse = !vitInverse;
+  try { localStorage.setItem('mt2_vitinv', vitInverse ? '1' : '0'); } catch (e) {}
+  vitInverseMaj(); rendre();
+}
+function vitInverseMaj() {
+  var b = document.getElementById('btnVitCoul'); if (!b) return;
+  b.textContent = vitInverse ? 'Vitesse : vert = lent' : 'Vitesse : rouge = lent';
+  var n = document.getElementById('vitCoulNote');
+  if (n) n.textContent = vitInverse ? 'Le rouge marque les endroits rapides.' : 'Le rouge marque les endroits lents.';
+}
 // [v18] les points de toutes les traces de la voiture sur le meme site (origine a moins de 3 km),
 // ramenes dans le repere du tour affiche : c'est le cadre commun de la carte.
 function cadreSite(v, lap, pts) {
@@ -3407,6 +3426,7 @@ document.querySelector('input[name=orient][value=' + carte.mode + ']').checked =
 try { details = localStorage.getItem('mt_details') === '1'; } catch (e) {}
 document.getElementById('btnDetails').textContent = details ? 'Masquer les détails' : 'Détails';
 document.body.classList.toggle('avecAide', details);   // [MT2 v2.5]
+vitInverseMaj();   // [MT2 v3.3] le libelle du bouton, au demarrage
 try { smartOn = localStorage.getItem('mt_smart') === '1'; } catch (e) {}
 try { smartZeroMs = +(localStorage.getItem('mt_smartzero') || 0) || 0; } catch (e) {}
 try { limitesTout = JSON.parse(localStorage.getItem('mt_limites') || '{}') || {}; } catch (e) { limitesTout = {}; }
