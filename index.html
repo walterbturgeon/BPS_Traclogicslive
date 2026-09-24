@@ -498,7 +498,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.4';
+var PAGE_VER = 'TRACLOGICS v5.5';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -920,10 +920,18 @@ function cafeRendre() {
            + '<tr><td>Temps à plein gaz</td><td class="num">' + n1(pgA.tGaz, 's') + '</td><td class="num">' + n1(pgB.tGaz, 's') + '</td></tr>'
            + '</table>';
         if (Math.abs(ecartPct) >= 5) {
-          var perte = (ecartPct < 0) ? perteCouple(hpA, hpB, res, pgB.tGaz) : perteCouple(hpB, hpA, res, pgA.tGaz);
+          // [MT2 v5.5] ⚠ SANS LA MASSE, ON NE CONVERTIT PAS EN SECONDES. resistanceHP() rend
+          // alors 0, et perteCouple() divise par la puissance entiere au lieu de la puissance
+          // moins la trainee et le roulement -- une cinquantaine de chevaux a 160 km/h sur la
+          // 944. Le resultat sortait plus petit d'environ un quart, sans un mot. On dit le
+          // pourcentage, qui est juste, et on nomme le champ qui manque.
+          var perte = mRef > 0 ? ((ecartPct < 0) ? perteCouple(hpA, hpB, res, pgB.tGaz) : perteCouple(hpB, hpA, res, pgA.tGaz)) : null;
           h += '<div class="small" style="margin-top:8px;color:' + (ecartPct < 0 ? 'var(--warn)' : 'var(--ok)') + '">\u26a0 '
              + (ecartPct < 0 ? 'B' : 'A') + ' a ' + Math.abs(ecartPct).toFixed(1).replace('.', ',') + ' % de couple en moins'
              + (perte ? ' : environ ' + perte.toFixed(2).replace('.', ',') + ' s par tour' : '') + '.</div>';
+          if (mRef <= 0) h += '<div class="small" style="margin-top:4px;color:var(--warn)">\u26a0 '
+             + 'Masse absente : la page ne convertit pas ce pourcentage en secondes. '
+             + 'Remplis « Masse sans pilote » dans les param\u00e8tres de la voiture.</div>';
         } else {
           h += '<div class="small" style="margin-top:8px;opacity:.75">Même couple des deux côtés à '
              + Math.abs(ecartPct).toFixed(1).replace('.', ',') + ' % près. Sous 5 %, la mesure ne tranche pas.</div>';
