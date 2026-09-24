@@ -486,7 +486,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v4.9';
+var PAGE_VER = 'TRACLOGICS v5.0';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -675,13 +675,15 @@ function piloteDe(nom) { for (var i = 0; i < pilotes.length; i++) if (pilotes[i]
 // [MT2 v2.9] la masse en piste : voiture + pilote de la seance
 // [MT2 v4.0] ce que la VOITURE vaut pour une seance donnee : la fiche d abord,
 // l ancien profil en secours. Une seule porte, pour tous les calculs de la page.
-var REG_VOITURE = ['masse', 'hp', 'hpRpm', 'tq', 'tqRpm', 'mapRef', 'cda'];
+var REG_VOITURE = ['masse', 'hp', 'hpRpm', 'tq', 'tqRpm', 'mapRef', 'cda', 'traction'];
+var TRACTIONS = { RWD: 'propulsion (RWD)', FWD: 'traction (FWD)', AWD: 'quatre roues (AWD)' };
 function reglagesDe(mac, sn) {
   var pr = profilDe(mac), f = sn ? (ficheEffective(mac, sn).f || {}) : {}, o = {};
   REG_VOITURE.forEach(function (k) {
     var x = f[k];
     o[k] = (x != null && String(x).trim() !== '') ? x : pr[k];
   });
+  if (!o.traction) o.traction = 'RWD';   // [MT2 v5.0] le defaut, pas un choix a faire
   return o;
 }
 // [MT2 v4.3] reglagesDerniers() vivait ici. Elle ne servait qu aux pastilles de la
@@ -700,18 +702,30 @@ function ficheCle(mac, sn) { return mac + '|' + sn.jour + '|' + sn.cle; }
 function ficheDe(mac, sn) { return fiches[ficheCle(mac, sn)] || null; }
 // [MT2 v0.4] la fiche QUI COMPTE pour une seance : la sienne, sinon celle d'avant
 function ficheEffective(mac, sn) {
-  var propre = fiches[ficheCle(mac, sn)];
-  if (propre) return { f: propre, herite: false, source: '' };
-  var v = voitures[mac];
+  var propre = fiches[ficheCle(mac, sn)] || null;
+  var v = voitures[mac], repris = null, source = '';
   if (v) {
     var avant = sessionsDe(v).filter(function (x) { return x.debutMs < sn.debutMs; });
     for (var i = avant.length - 1; i >= 0; i--) {
       var ff = fiches[ficheCle(mac, avant[i])];
-      if (ff) return { f: ff, herite: true,
-        source: 'session ' + avant[i].numJour + ' du ' + new Date(avant[i].debutMs).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long' }) };
+      if (ff) { repris = ff;
+        source = 'session ' + avant[i].numJour + ' du ' + new Date(avant[i].debutMs).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long' });
+        break; }
     }
   }
-  return { f: null, herite: false, source: '' };
+  if (!propre && !repris) return { f: null, herite: false, source: '' };
+  if (!repris) return { f: propre, herite: false, source: '' };
+  if (!propre) return { f: repris, herite: true, source: source };
+  // [MT2 v5.0] les deux existent : le propre gagne CHAMP PAR CHAMP, le reste est repris
+  var f = {}, reste = 0;
+  Object.keys(repris).forEach(function (k) { f[k] = repris[k]; });
+  Object.keys(propre).forEach(function (k) {
+    if (propre[k] != null && String(propre[k]).trim() !== '') f[k] = propre[k];
+  });
+  Object.keys(repris).forEach(function (k) {
+    if (propre[k] == null || String(propre[k]).trim() === '') reste++;
+  });
+  return { f: f, herite: reste > 0, source: source };
 }
 var ficheEnCours = null;   // { mac, cle, nom }
 
@@ -798,6 +812,7 @@ function cafeDiffFiche(fa, fb) {
   var noms = { pilote: 'Pilote', piste: 'État de la piste',
     masse: 'Masse sans pilote', hp: 'Puissance', hpRpm: 'Régime de la puissance',   // [MT2 v4.0]
     tq: 'Couple', tqRpm: 'Régime du couple', mapRef: 'MAP au banc', cda: 'Traînée (CdA)',
+    traction: 'Roues motrices',
     pneuModele: 'Modèle de pneu', pneuTaille: 'Grandeur de pneu',
     psiAvG: 'Pression av. G', psiAvD: 'Pression av. D', psiArG: 'Pression ar. G', psiArD: 'Pression ar. D',
     ressortAv: 'Ressort avant', ressortAr: 'Ressort arrière', amortAv: 'Amortisseur avant', amortAr: 'Amortisseur arrière',
@@ -1530,6 +1545,10 @@ function ficheOuvrir(mac, jour, cle) {
         + '<div class="card"><b>La voiture ce jour-là</b>'
         + '<div class="g2" style="margin-top:8px">' + ch('masse', 'Masse sans pilote', rg.masse, 'kg')
         + ch('cda', 'Traînée (CdA)', rg.cda) + '</div>'
+        + '<div class="ch" style="margin-top:8px"><label>Roues motrices</label><select id="fi_traction">'
+        + Object.keys(TRACTIONS).map(function (k) {
+            return '<option value="' + k + '"' + (rg.traction === k ? ' selected' : '') + '>' + TRACTIONS[k] + '</option>';
+          }).join('') + '</select></div>'
         + '<div class="small">Moteur</div>'
         + '<div class="g2" style="margin-top:4px">' + ch('hp', 'Puissance', rg.hp, 'HP') + ch('hpRpm', 'à quel régime', rg.hpRpm, 'tr/min')
         + ch('tq', 'Couple', rg.tq, 'lb-pi') + ch('tqRpm', 'à quel régime', rg.tqRpm, 'tr/min')
@@ -1558,7 +1577,7 @@ function ficheOuvrir(mac, jour, cle) {
 }
 function ficheEnregistrer() {
   if (!ficheEnCours) return;
-  var f = {}, champs = ['masse', 'cda', 'hp', 'hpRpm', 'tq', 'tqRpm', 'mapRef',   // [MT2 v4.0] la voiture ce jour-la
+  var f = {}, champs = ['masse', 'cda', 'traction', 'hp', 'hpRpm', 'tq', 'tqRpm', 'mapRef',   // [MT2 v4.0] la voiture ce jour-la
     'pneuModele', 'pneuTaille', 'psiAvG', 'psiAvD', 'psiArG', 'psiArD',
     'ressortAv', 'ressortAr', 'amortAv', 'amortAr', 'barreAv', 'barreAr', 'hauteurAv', 'hauteurAr',
     'carrossage', 'pincement', 'aileron', 'lame', 'gurney', 'divers'];
