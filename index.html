@@ -486,7 +486,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v4.8';
+var PAGE_VER = 'TRACLOGICS v4.9';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -775,8 +775,27 @@ function cafePleinGaz(v, st) {
   return { map: mediane(maps), rpm: rpms.length ? mediane(rpms) : null,
            kmh: vits.length ? mediane(vits) : null, tGaz: n * pas, n: n };
 }
+// [MT2 v4.9] l etat de piste propose par la meteo des tours de la seance
+var PISTE_NOMS = { seche: 'sèche', sechante: 'séchante', humide: 'humide', mouillee: 'mouillée' };
+function pisteAuto(sn) {
+  if (!sn || !sn.laps || !sn.laps.length) return null;
+  var vus = sn.laps.filter(function (l) { return l.meteo && l.meteo.pluie != null; });
+  if (!vus.length) return null;
+  var max = 0; vus.forEach(function (l) { if (l.meteo.pluie > max) max = l.meteo.pluie; });
+  var fin = vus[vus.length - 1].meteo.pluie;
+  if (max <= 0) return 'seche';
+  if (fin <= 0) return 'sechante';   // il a plu, il ne pleut plus : la piste seche
+  return max < 0.5 ? 'humide' : 'mouillee';
+}
+// ce que la fiche dit, sinon ce que la meteo propose
+function pisteDe(mac, sn) {
+  var f = ficheEffective(mac, sn).f;
+  var main = f && f.piste ? f.piste : '';
+  var auto = pisteAuto(sn);
+  return { code: main || auto || '', nom: PISTE_NOMS[main || auto] || '', aLaMain: !!main, auto: auto };
+}
 function cafeDiffFiche(fa, fb) {
-  var noms = { pilote: 'Pilote',
+  var noms = { pilote: 'Pilote', piste: 'État de la piste',
     masse: 'Masse sans pilote', hp: 'Puissance', hpRpm: 'Régime de la puissance',   // [MT2 v4.0]
     tq: 'Couple', tqRpm: 'Régime du couple', mapRef: 'MAP au banc', cda: 'Traînée (CdA)',
     pneuModele: 'Modèle de pneu', pneuTaille: 'Grandeur de pneu',
@@ -926,6 +945,7 @@ function cafeRendre() {
      + '<tr><td>Pluie</td><td class="num">' + sa.pluie.toFixed(1).replace('.', ',') + ' mm/h</td><td class="num">' + sb.pluie.toFixed(1).replace('.', ',') + ' mm/h</td>'
      + '<td class="num">' + (dP > 0 ? '+' : '') + dP.toFixed(1).replace('.', ',') + '</td></tr></table>';
   h += '</div>';
+  h += cafeSecMouille(mac, A, B, sa, sb);   // [MT2 v4.9]
   // ---- les causes possibles, secteur par secteur ----
   h += cafeCauses(sa, sb);
   // ---- ce que le pilote a fait, secteur par secteur ----
@@ -937,6 +957,39 @@ function cafeRendre() {
   document.getElementById('cafeCorps').innerHTML = h;
 }
 // [MT2 v1.2] ce que la trace dit des mains du pilote, secteur par secteur
+// [MT2 v4.9] ce que le pilote change quand la piste change d etat
+function cafeSecMouille(mac, A, B, sa, sb) {
+  var pa = pisteDe(mac, A), pb = pisteDe(mac, B);
+  if (!pa.code || !pb.code || pa.code === pb.code) return '';   // meme etat : rien a dire
+  if (!sa.stats || !sb.stats || sa.stats.length !== sb.stats.length) return '';
+  var li = [], dLat = [], n1 = function (x, u) { return (x > 0 ? '+' : '') + x.toFixed(1).replace('.', ',') + ' ' + u; };
+  sa.stats.forEach(function (a, i) {
+    var b = sb.stats[i]; if (!a || !b) return;
+    var c = [];
+    if (a.lat != null && b.lat != null) { var d = b.lat - a.lat; dLat.push(Math.abs(d));
+      if (Math.abs(d) >= 0.8) c.push('<b>ligne ' + Math.abs(d).toFixed(1).replace('.', ',') + ' m à côté</b>'); }
+    if (a.freinage != null && b.freinage != null) { var df = b.freinage - a.freinage;
+      if (Math.abs(df) >= 5) c.push('freinage ' + Math.abs(Math.round(df)) + ' m ' + (df < 0 ? 'plus tôt' : 'plus tard')); }
+    if (a.gazPt != null && b.gazPt != null) { var dg = b.gazPt - a.gazPt;
+      if (Math.abs(dg) >= 5) c.push('gaz ' + Math.abs(Math.round(dg)) + ' m ' + (dg < 0 ? 'plus tôt' : 'plus tard')); }
+    if (a.kmhMin != null && b.kmhMin != null) { var dv = b.kmhMin - a.kmhMin;
+      if (Math.abs(dv) >= 2) c.push('point lent ' + n1(dv, 'km/h')); }
+    if (c.length) li.push('<tr><td>P' + (i + 1) + '</td><td>' + c.join(' · ') + '</td></tr>');
+  });
+  var moy = dLat.length ? dLat.reduce(function (x, y) { return x + y; }, 0) / dLat.length : null;
+  var h = '<div class="card"><b>Piste ' + pa.nom + ' contre piste ' + pb.nom + '</b>'
+        + '<div class="small" style="opacity:.75;margin-top:4px">A : ' + pa.nom + (pa.aLaMain ? ' (à la main)' : ' (météo)')
+        + ' · B : ' + pb.nom + (pb.aLaMain ? ' (à la main)' : ' (météo)') + '</div>';
+  if (!li.length) return h + '<div class="small" style="margin-top:8px">La ligne et les repères n\u2019ont pas bougé entre les deux.</div></div>';
+  h += '<table style="margin-top:8px"><tr><th>Secteur</th><th>Ce qui a changé</th></tr>' + li.join('') + '</table>';
+  // [MT2 v4.9] un « 0,0 m » se lit comme une mesure ; sous 30 cm, c est du bruit de trace
+  if (moy != null) h += '<div class="small" style="margin-top:8px">'
+       + (moy < 0.3 ? 'La ligne n’a pas bougé : moins de 30 cm d’écart moyen.'
+                    : 'Décalage moyen de la ligne : <b>' + moy.toFixed(1).replace('.', ',') + ' m</b>.')
+       + '</div>';
+  h += '<div class="small aide" style="opacity:.7;margin-top:6px">REPÈRE, pas une mesure : sur piste mouillée on cherche l\u2019asphalte propre, une à deux largeurs de voiture à côté de la ligne sèche — 2 à 4 m — et on freine plus droit pour tourner plus tôt. La page dit de combien tu t\u2019es décalé, pas de quel côté : l\u2019écart est mesuré par rapport à l\u2019axe du circuit.</div>';
+  return h + '</div>';
+}
 function cafePilote(sa, sb) {
   if (!sa.stats || !sb.stats || !sa.sect || !sb.sect || sa.sect.length !== sb.sect.length) return '';
   var lignes = [];
@@ -1463,7 +1516,17 @@ function ficheOuvrir(mac, jour, cle) {
         + jourTexte(sn.debutMs) + ' · ' + heureTexte(sn.debutMs) + ' · ' + sn.n + ' tour(s)'
         + (sn.best ? ' · meilleur ' + duree(sn.best.dureeMs) : '') + '</div>'
         + '<div class="ch"><label>Pilote</label><select id="fi_pilote">' + opts + '</select></div>'
-        + '<div class="small aide" style="opacity:.7">Ajoute un pilote dans le panneau PILOTES.</div></div>'
+        + '<div class="small aide" style="opacity:.7">Ajoute un pilote dans le panneau PILOTES.</div>'
+        + (function () {   // [MT2 v4.9] l etat de la piste : la meteo propose, le pilote tranche
+            var pe = pisteDe(mac, sn), autoNom = pe.auto ? PISTE_NOMS[pe.auto] : 'pas de relevé';
+            var ops = ['<option value="">selon la météo — ' + autoNom + '</option>'];
+            Object.keys(PISTE_NOMS).forEach(function (k) {
+              ops.push('<option value="' + k + '"' + (f.piste === k ? ' selected' : '') + '>' + PISTE_NOMS[k] + '</option>');
+            });
+            return '<div class="ch" style="margin-top:8px"><label>État de la piste</label>'
+                 + '<select id="fi_piste">' + ops.join('') + '</select></div>';
+          })()
+        + '</div>'
         + '<div class="card"><b>La voiture ce jour-là</b>'
         + '<div class="g2" style="margin-top:8px">' + ch('masse', 'Masse sans pilote', rg.masse, 'kg')
         + ch('cda', 'Traînée (CdA)', rg.cda) + '</div>'
@@ -1501,6 +1564,7 @@ function ficheEnregistrer() {
     'carrossage', 'pincement', 'aileron', 'lame', 'gurney', 'divers'];
   champs.forEach(function (k) { var e = document.getElementById('fi_' + k); if (e && e.value.trim()) f[k] = e.value.trim(); });
   var pl = document.getElementById('fi_pilote'); if (pl && pl.value) f.pilote = pl.value;
+  var pi = document.getElementById('fi_piste'); if (pi && pi.value) f.piste = pi.value;   // [MT2 v4.9]
   var nt = document.getElementById('fi_notes'); if (nt && nt.value.trim()) f.notes = nt.value.trim();
   if (Object.keys(f).length) fiches[ficheEnCours.cle] = f; else delete fiches[ficheEnCours.cle];
   fichesSauver(); salir();   // [MT2 v4.5] la masse, le pilote et le reste nourrissent l affichage

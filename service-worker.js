@@ -4,7 +4,7 @@
 // ⚠ CE NUMERO DOIT MONTER A CHAQUE PUBLICATION : c'est lui qui declenche le
 // rechargement automatique de la page (controllerchange).
 const PREFIX = 'draglog-mt-';
-const CACHE = PREFIX + 'v106';   // v106 : la meteo s etale au lieu de s empiler
+const CACHE = PREFIX + 'v107';   // v107 : etat de la piste et bloc sec contre mouille
 const ASSETS = ['./', './index.html', './manifest.json', './icon-mt-192.png', './icon-mt-512.png', './logo-traclogics.jpg',
                 './circuits_index.csv', './circuits_offsets.csv', '../circuits_index.csv', '../circuits_offsets.csv'];
 
