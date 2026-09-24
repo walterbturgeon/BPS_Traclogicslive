@@ -393,7 +393,7 @@
 <div class="card" style="margin:0 0 10px">
   <details>
     <summary>Journal de diagnostic</summary>
-    <div class="row" style="margin:8px 0"><button class="btn sec" onclick="toursCsv()">Exporter les tours (CSV)</button><button class="btn sec" onclick="traceCsv()">Exporter la trace du tour (CSV)</button></div>
+    <div class="row" style="margin:8px 0"><button class="btn sec" onclick="toursCsv()">Exporter les tours (CSV)</button><button class="btn sec" onclick="traceCsv()">Exporter la trace du tour (CSV)</button><button class="btn sec" onclick="toutExporter()">Tout exporter (brut + déductions)</button></div>
     <div class="row" style="margin:8px 0"><button class="btn sec" onclick="jrnPartager()">Télécharger le journal</button><button class="btn sec" onclick="jrnEffacer()">Effacer</button></div>
     <div class="jrn" id="jrn"></div>
   </details>
@@ -486,7 +486,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.0';
+var PAGE_VER = 'TRACLOGICS v5.1';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -3274,6 +3274,371 @@ function traceCsv() {
   });
   csvTelecharger('tracklogics_trace_' + v.nom + '_tour' + vueTour + '.csv', lignes.join('\n'));
   jrn('Export CSV de la trace du tour #' + vueTour + ' : ' + pts.length + ' points.');
+}
+
+
+// =====================================================================
+// [MT2 v5.1] TOUT EXPORTER -- le brut du DLPT2 et les deductions de la page
+// =====================================================================
+// ⚠ BUT : que le pilote puisse REFAIRE chaque calcul a la main, sans la page.
+// Chaque fichier porte donc LES ENTREES a cote du RESULTAT : l'octet brut a cote de la
+// valeur decodee, le div et le off a cote des deux, le tour de reference a cote de
+// l'ecart, le seuil a cote du taux de confiance.
+// ⚠ L'export APPELLE les memes fonctions que l'affichage. Il ne recalcule rien de son
+// cote : sinon il validerait autre chose que ce que l'ecran montre.
+// ⚠ Les nombres derives dependent de l'etat de la page (smart, mode de comparaison,
+// nombre de partielles, remise a zero). Cet etat part dans 00_contexte.csv, sinon rien
+// n'est reproductible.
+
+function expoHoro() {
+  var d = new Date();
+  return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2)
+       + '_' + ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2);
+}
+function expoNb(x, n) { return (x == null || !isFinite(x)) ? '' : +(+x).toFixed(n == null ? 3 : n); }
+function expoIso(ms) { return ms ? new Date(ms).toISOString() : ''; }
+function expoLatLon(lap, dx, dy) {
+  var R = 6371000, rad = Math.PI / 180;
+  if (lap.oLat == null || lap.oLon == null) return ['', ''];
+  return [(lap.oLat + (dy / R) / rad).toFixed(7),
+          (lap.oLon + (dx / (R * Math.cos(lap.oLat * rad))) / rad).toFixed(7)];
+}
+// le contexte d'un tour : sa voiture, sa journee, sa session -- les 6 premieres colonnes partout
+function expoCle(v, lap, sn) {
+  return [v.nom, v.mac, sn ? new Date(sn.debutMs).toISOString().slice(0, 10) : '',
+          sn ? sn.numJour : '', lapNumAff(lap), lap.num];
+}
+function expoSn(v, lap) { var r = null; sessionsDe(v).forEach(function (x) { if (x.cle === lapSessionCle(lap)) r = x; }); return r; }
+// la position sur la trace a l'instant t, par interpolation lineaire (meme regle que canValeurA)
+function expoPosA(pts, inter, tMs) {
+  if (!pts.length) return null;
+  var i = tMs / inter, i0 = Math.floor(i);
+  if (i0 < 0) i0 = 0;
+  if (i0 > pts.length - 1) return null;
+  var i1 = Math.min(i0 + 1, pts.length - 1), f = i - i0, a = pts[i0], b = pts[i1];
+  return { dx: a.dx + f * (b.dx - a.dx), dy: a.dy + f * (b.dy - a.dy), kmh: a.kmh + f * (b.kmh - a.kmh) };
+}
+// les bornes de secteur que la page utilise EN CE MOMENT, pour ce tour
+function expoBornes(v, lap, m) {
+  var refB = smartOn ? (compReference(v, lap) || lap) : null;
+  return refB ? smartVirages(v, refB, m) : null;
+}
+function expoSecteurs1(v, lap) {   // {res, stats, m, bornesV, pts, inter} ou null
+  var tr = v.traces[lap.num], pts = traceEntiere(tr);
+  if (!pts.length || !tr) return null;
+  var m = circuitPourTour(lap, pts); if (!m) return null;
+  var bornesV = expoBornes(v, lap, m);
+  var res = secteursCalculer(lap, pts, m, secteursN, tr.intervalMs, bornesV);
+  if (!res) return null;
+  return { res: res, stats: smartStats(lap, pts, res, tr, m), m: m, bornesV: bornesV,
+           pts: pts, inter: tr.intervalMs || 500 };
+}
+
+// ---- 00 : l'etat de la page, sans lequel rien ne se refait ----
+function expoContexte() {
+  var L = ['cle;valeur;remarque'];
+  function a(k, x, r) { L.push([k, x == null ? '' : x, r || ''].map(csvChamp).join(';')); }
+  a('page', PAGE_VER, 'la version qui a produit cet export');
+  a('exporte_le', new Date().toISOString(), '');
+  a('mode_smart', smartOn ? 'allume' : 'eteint', 'eteint : pas de sections aux virages, pas de cause, pas de conseil');
+  a('comparaison', compMode, 'aucun | precedent | session | jour');
+  a('partielles_n', secteursN, 'nombre de parts egales quand les sections aux virages manquent');
+  a('remise_a_zero', smartZeroMs ? new Date(smartZeroMs).toISOString() : '', 'les tours d avant sont ecartes de l apprentissage');
+  a('seuil_freinage_m', SEUILS.freinage[0] + ' / ' + SEUILS.freinage[1], 'seuil qui autorise a parler / valeur sans doute');
+  a('seuil_point_kmh', SEUILS.point[0] + ' / ' + SEUILS.point[1], '');
+  a('seuil_ligne_m', SEUILS.ligne[0] + ' / ' + SEUILS.ligne[1], '');
+  a('seuil_gaz_m', SEUILS.gaz[0] + ' / ' + SEUILS.gaz[1], '');
+  a('seuil_map_kpa', SEUILS.map[0] + ' / ' + SEUILS.map[1], '');
+  a('seuil_temps_ms', SEUILS.temps[0] + ' / ' + SEUILS.temps[1], '');
+  a('map_perte_kpa', MAP_PERTE, 'la part perdue en frottement et en pompage, dans la loi du couple');
+  a('meteo_ecart_max_c', 3, 'au-dela, deux tours ne se comparent pas');
+  a('meteo_pluie_seuil', 0.2, 'mm/h : au-dessus, le tour est dit mouille');
+  a('hors_analyse_1', 'sortie des puits', 'le premier tour d une session');
+  a('hors_analyse_2', '+10 % du meilleur', 'trafic ou roulage');
+  ordreVoitures.forEach(function (mac) {
+    var v = voitures[mac], li = limites(mac);
+    a('limite_eau_' + v.nom, li.eau, 'degres'); a('limite_huile_' + v.nom, li.huile, 'degres');
+    a('limite_air_' + v.nom, li.air, 'degres');
+  });
+  return L.join('\n');
+}
+
+// ---- 02 : les canaux SECONDE PAR SECONDE, octet brut ET valeur decodee ----
+// valeur = octet x div + off. Quand le bit de presence est 0, le boitier n'a rien envoye :
+// la derniere valeur connue tient (jusqu'a 30 s en arriere). La colonne « present » le dit.
+function expoSecondes() {
+  var e = ['voiture;mac;jour;session;tour;tour_fil;seconde;masque;format_variable'];
+  for (var k = 1; k <= 8; k++)
+    e[0] += ';p' + k + '_nom;p' + k + '_unite;p' + k + '_idx;p' + k + '_octet;p' + k + '_present;p' + k + '_div;p' + k + '_off;p' + k + '_valeur';
+  e[0] += ';t_ms;dx_m;dy_m;kmh;lat;lon';
+  var L = e;
+  ordreVoitures.forEach(function (mac) {
+    var v = voitures[mac];
+    lapsTries(v).forEach(function (lap) {
+      var ech = canEchantillons(lap); if (!ech.length) return;
+      var sn = expoSn(v, lap), tr = v.traces[lap.num], pts = traceEntiere(tr), inter = (tr && tr.intervalMs) || 500;
+      var vari = 0; if (lap.can) Object.keys(lap.can.parts).forEach(function (p) { if (lap.can.parts[p].variable) vari = 1; });
+      for (var s = 0; s < ech.length; s++) {
+        var r = ech[s], msk = r ? r[0] : '', lig = expoCle(v, lap, sn).concat([s, msk, vari]);
+        for (var k2 = 0; k2 < 8; k2++) {
+          var c = lap.cat && lap.cat.ch[k2], pres = (r && (r[0] & (1 << k2))) ? 1 : 0;
+          lig.push(c ? c.nom : '', c ? c.unite : '', c ? c.idx : '',
+                   pres ? r[1 + k2] : '', pres, c ? c.div : '', c ? c.off : '',
+                   expoNb(canValeur(lap, ech, k2, s)));
+        }
+        var p = expoPosA(pts, inter, s * 1000);
+        if (p) { var ll = expoLatLon(lap, p.dx, p.dy);
+          lig.push(s * 1000, Math.round(p.dx), Math.round(p.dy), expoNb(p.kmh, 1), ll[0], ll[1]); }
+        else lig.push(s * 1000, '', '', '', '', '');
+        L.push(lig.map(csvChamp).join(';'));
+      }
+    });
+  });
+  return L.join('\n');
+}
+
+// ---- 03 : TOUTES les traces, tous les tours, avec l'abscisse et le secteur ----
+function expoTraces() {
+  var L = ['voiture;mac;jour;session;tour;tour_fil;point;t_ms;dx_m;dy_m;kmh;lat;lon;abscisse_m;secteur;circuit'];
+  ordreVoitures.forEach(function (mac) {
+    var v = voitures[mac];
+    lapsTries(v).forEach(function (lap) {
+      var tr = v.traces[lap.num], pts = traceEntiere(tr); if (!pts.length) return;
+      var sn = expoSn(v, lap), inter = (tr && tr.intervalMs) || 500, cle = expoCle(v, lap, sn);
+      var S = expoSecteurs1(v, lap), r = S ? S.res.r : null, bo = S ? S.res.bornes : null;
+      pts.forEach(function (p, i) {
+        var ll = expoLatLon(lap, p.dx, p.dy), sec = '';
+        if (r && bo) { var j = 0; while (j < bo.length && r[i] >= bo[j]) j++; sec = j + 1; }
+        L.push(cle.concat([i, i * inter, p.dx, p.dy, p.kmh, ll[0], ll[1],
+                           r ? expoNb(r[i], 1) : '', sec, S ? S.m.c.nom : '']).map(csvChamp).join(';'));
+      });
+    });
+  });
+  return L.join('\n');
+}
+
+// ---- 04 : les secteurs, avec LES QUATRE FAITS et l'ecart contre la reference ----
+function expoSecteursCsv() {
+  var L = ['voiture;mac;jour;session;tour;tour_fil;secteur;bornes_mode;borne_debut_m;borne_fin_m;temps_s;'
+         + 'kmh_min;v_entree;v_sortie;v_moy;freinage_m;gaz_pt_m;chemin_m;ecart_lat_m;'
+         + 'gaz_moy;rpm_moy;map_moy;map_plein_gaz;rpm_plein_gaz;n_plein_gaz;suralimente;'
+         + 'ref_tour;ref_temps_s;delta_vs_ref_s;circuit'];
+  ordreVoitures.forEach(function (mac) {
+    var v = voitures[mac];
+    lapsTries(v).forEach(function (lap) {
+      var S = expoSecteurs1(v, lap); if (!S) return;
+      var sn = expoSn(v, lap), cle = expoCle(v, lap, sn);
+      var mode = S.bornesV ? 'virages' : 'parts egales';
+      // la reference, calculee sur LES MEMES bornes -- sinon les ecarts ne veulent rien dire
+      var ref = compReference(v, lap), refSect = null;
+      if (ref) {
+        var pr = traceEntiere(v.traces[ref.num]), mr = pr.length ? circuitPourTour(ref, pr) : null;
+        if (mr && mr.c.id === S.m.c.id) {
+          var rr = secteursCalculer(ref, pr, mr, secteursN, v.traces[ref.num].intervalMs, S.bornesV);
+          if (rr) refSect = rr.sect;
+        }
+      }
+      S.res.sect.forEach(function (t, i) {
+        var o = S.stats[i] || {}, b0 = i === 0 ? 0 : S.res.bornes[i - 1];
+        var b1 = i < S.res.bornes.length ? S.res.bornes[i] : S.res.L;
+        var rt = refSect ? refSect[i] : null;
+        L.push(cle.concat([i + 1, mode, expoNb(b0, 1), expoNb(b1, 1), expoNb(t / 1000),
+          expoNb(o.kmhMin, 1), expoNb(o.vEntree, 1), expoNb(o.vSortie, 1), expoNb(o.vMoy, 1),
+          expoNb(o.freinage, 1), expoNb(o.gazPt, 1), expoNb(o.chemin, 1), expoNb(o.lat, 2),
+          expoNb(o.gaz, 1), expoNb(o.rpm, 0), expoNb(o.map, 1),
+          expoNb(o.mapPlein, 1), expoNb(o.rpmPlein, 0), o.nP || 0, o.suralim ? 1 : 0,
+          ref ? lapNumAff(ref) : '', rt != null ? expoNb(rt / 1000) : '',
+          (t != null && rt != null) ? expoNb((t - rt) / 1000) : '', S.m.c.nom]).map(csvChamp).join(';'));
+      });
+    });
+  });
+  return L.join('\n');
+}
+
+// ---- 05 : CHAQUE DEDUCTION, avec sa mesure, son seuil et son taux de confiance ----
+// « retenu = 1 » veut dire : la page a le droit de le dire a l'ecran. En dessous de 100 %
+// elle se tait en mode smart. Tout le reste est visible ici, meme ce qu'elle a tu.
+function expoDeductions() {
+  var L = ['voiture;mac;jour;session;tour;tour_fil;portee;secteur;mesure;valeur;unite;'
+         + 'seuil;seuil_sur;confiance_pct;retenu;reference;texte'];
+  // ⚠ « retenu » veut dire : LA PAGE LE DIT A L'ECRAN. Sous 100 % de confiance elle se tait
+  // en mode smart. Une ligne sans seuil n'a pas de verdict a rendre : sa case reste VIDE,
+  // jamais 0 -- un 0 se lirait comme « juge, et ecarte », ce qui serait faux.
+  function pousse(cle, portee, sec, mes, val, uni, s0, s1, ref, txt, force) {
+    var pct = (val == null || s0 == null) ? '' : confiancePct(val, s0, s1);
+    var ret = (force != null) ? force : (s0 == null ? '' : (pct === 100 ? 1 : 0));
+    L.push(cle.concat([portee, sec == null ? '' : sec, mes, expoNb(val, 2), uni,
+      s0 == null ? '' : s0, s1 == null ? '' : s1, pct, ret,
+      ref == null ? '' : ref, txt || '']).map(csvChamp).join(';'));
+  }
+  ordreVoitures.forEach(function (mac) {
+    var v = voitures[mac];
+    // --- par tour et par secteur ---
+    lapsTries(v).forEach(function (lap) {
+      var sn = expoSn(v, lap), cle = expoCle(v, lap, sn);
+      var hors = horsAnalyse(v, lap);
+      pousse(cle, 'tour', null, 'hors_analyse', null, '', null, null, '', hors || 'non');
+      var sens = sensTour(v, lap);
+      pousse(cle, 'tour', null, 'sens', null, '', null, null, '',
+             sens === 0 ? 'inconnu' : (sens > 0 ? 'antihoraire' : 'horaire'));
+      var ref = compReference(v, lap);
+      if (ref && lap.dureeMs != null && ref.dureeMs != null)
+        pousse(cle, 'tour', null, 'temps', lap.dureeMs - ref.dureeMs, 'ms',
+               SEUILS.temps[0], SEUILS.temps[1], lapNumAff(ref), refMot(lap, ref));
+      smartTemps(v, lap).forEach(function (t) {
+        pousse(cle, 'tour', null, 'temperature', null, '', null, null, '', t);
+      });
+      var S = expoSecteurs1(v, lap); if (!S || !ref) return;
+      var pr = traceEntiere(v.traces[ref.num]), mr = pr.length ? circuitPourTour(ref, pr) : null;
+      if (!mr || mr.c.id !== S.m.c.id) return;
+      var rr = secteursCalculer(ref, pr, mr, secteursN, v.traces[ref.num].intervalMs, S.bornesV);
+      if (!rr) return;
+      var rs = smartStats(ref, pr, rr, v.traces[ref.num], mr);
+      S.stats.forEach(function (a, i) {
+        var b = rs[i]; if (!a || !b) return;
+        var n = lapNumAff(ref);
+        if (a.freinage != null && b.freinage != null)
+          pousse(cle, 'secteur', i + 1, 'freinage', a.freinage - b.freinage, 'm', SEUILS.freinage[0], SEUILS.freinage[1], n, '+ = tu freines plus tot que la reference');
+        if (a.kmhMin != null && b.kmhMin != null)
+          pousse(cle, 'secteur', i + 1, 'point', a.kmhMin - b.kmhMin, 'km/h', SEUILS.point[0], SEUILS.point[1], n, '+ = tu passes plus vite au point lent');
+        if (a.chemin && b.chemin)
+          pousse(cle, 'secteur', i + 1, 'ligne', a.chemin - b.chemin, 'm', SEUILS.ligne[0], SEUILS.ligne[1], n, '+ = ta ligne est plus longue');
+        if (a.gazPt != null && b.gazPt != null)
+          pousse(cle, 'secteur', i + 1, 'gaz', a.gazPt - b.gazPt, 'm', SEUILS.gaz[0], SEUILS.gaz[1], n, '+ = tu remets les gaz plus loin');
+        if (a.mapPlein != null && b.mapPlein != null)
+          pousse(cle, 'secteur', i + 1, 'map', a.mapPlein - b.mapPlein, 'kPa', SEUILS.map[0], SEUILS.map[1], n, 'a pleine charge tenue seulement');
+        var dt = (S.res.sect[i] != null && rr.sect[i] != null) ? S.res.sect[i] - rr.sect[i] : null;
+        var act = smartAction(a, b);
+        if (act) pousse(cle, 'secteur', i + 1, 'consigne', null, '', null, null, n, act, 1);
+        var cs = smartCause(dt, a, b);
+        if (cs) pousse(cle, 'secteur', i + 1, 'cause', null, '', null, null, n, cs, 1);
+      });
+    });
+    // --- par seance : le Coffee break ---
+    sessionsDe(v).forEach(function (sn) {
+      var cle = [v.nom, v.mac, new Date(sn.debutMs).toISOString().slice(0, 10), sn.numJour, '', ''];
+      var st = cafeStats(v, sn);
+      pousse(cle, 'seance', null, 'tours_retenus', st.n, '', null, null, '', '');
+      pousse(cle, 'seance', null, 'meilleur_tour_s', st.best != null ? st.best / 1000 : null, 's', null, null, '', '');
+      pousse(cle, 'seance', null, 'moyenne_3_meilleurs_s', st.moy3 != null ? st.moy3 / 1000 : null, 's', null, null, '', '');
+      pousse(cle, 'seance', null, 'ecart_type_s', st.ecartType != null ? st.ecartType / 1000 : null, 's', null, null, '', '');
+      pousse(cle, 'seance', null, 'temperature_c', st.degres, 'C', null, null, '', '');
+      pousse(cle, 'seance', null, 'pluie_mm_h', st.pluie, 'mm/h', null, null, '', '');
+      var pi = pisteDe(v.mac, sn);
+      pousse(cle, 'seance', null, 'etat_piste', null, '', null, null, '',
+             (pi.nom || 'inconnu') + (pi.aLaMain ? ' (a la main)' : ' (propose par la meteo)'));
+      var pg = cafePleinGaz(v, st);
+      if (pg) {
+        pousse(cle, 'seance', null, 'map_plein_gaz', pg.map, 'kPa', null, null, '', 'mediane des sections, demande tenue 2 s');
+        pousse(cle, 'seance', null, 'rpm_plein_gaz', pg.rpm, 'RPM', null, null, '', '');
+        pousse(cle, 'seance', null, 'temps_plein_gaz', pg.tGaz, 's', null, null, '', pg.n + ' echantillons');
+      }
+      var rg = reglagesDe(v.mac, sn);
+      pousse(cle, 'seance', null, 'couple_banc', rg.tq, 'lb-pi', null, null, '', 'fiche : couple au banc');
+      pousse(cle, 'seance', null, 'map_banc', mapRefDe(rg), 'kPa', null, null, '', 'fiche : MAP du banc');
+      var ms = masseDe(v.mac, sn);
+      pousse(cle, 'seance', null, 'masse_voiture', ms ? ms.voiture : null, 'kg', null, null, '', '');
+      pousse(cle, 'seance', null, 'masse_pilote', ms ? ms.pilote : null, 'kg', null, null, '', ms && !ms.avecPilote ? 'pilote inconnu : compte pour 0' : '');
+      pousse(cle, 'seance', null, 'masse_totale', ms ? ms.total : null, 'kg', null, null, '', '');
+      pousse(cle, 'seance', null, 'cda', cdaDe(rg), 'm2', null, null, '', '');
+      pousse(cle, 'seance', null, 'traction', null, '', null, null, '', rg.traction || '');
+      if (pg) {
+        var cj = coupleDuJour(rg, pg.map);
+        pousse(cle, 'seance', null, 'couple_du_jour', cj, 'lb-pi', null, null, '',
+               cj == null ? 'refuse : MAP du banc absent ou depasse' :
+               'couple_banc x (map_plein_gaz - ' + MAP_PERTE + ') / (map_banc - ' + MAP_PERTE + ')');
+      }
+      var crb = mapCourbe(v, sn.laps);
+      if (crb) crb.forEach(function (q) {
+        pousse(cle, 'seance', null, 'courbe_map', q.map, 'kPa', null, null, '', q.rpm + ' RPM');
+      });
+      sn.laps.forEach(function (l) {
+        var dv = crb ? mapDeviation(crb, mapPaires(v, l)) : null;
+        if (dv) pousse([v.nom, v.mac, new Date(sn.debutMs).toISOString().slice(0, 10), sn.numJour, lapNumAff(l), l.num],
+               'tour', null, 'deviation_map', dv.ecart, 'kPa', null, null, '', dv.n + ' paires, a regime egal');
+      });
+    });
+  });
+  return L.join('\n');
+}
+
+// ---- 06 : la fiche EFFECTIVE, champ par champ, avec l'origine de chaque valeur ----
+// C'est ici que l'heritage se verifie : une valeur reprise d'une seance d'avant le dit.
+function expoFiches() {
+  var L = ['voiture;mac;jour;session;champ;valeur;origine'];
+  ordreVoitures.forEach(function (mac) {
+    var v = voitures[mac];
+    sessionsDe(v).forEach(function (sn) {
+      var eff = ficheEffective(mac, sn), f = eff.f || {}, propre = fiches[ficheCle(mac, sn)] || {};
+      var jour = new Date(sn.debutMs).toISOString().slice(0, 10);
+      var cles = {}; Object.keys(f).forEach(function (k) { cles[k] = 1; });
+      REG_VOITURE.forEach(function (k) { cles[k] = 1; });
+      Object.keys(cles).sort().forEach(function (k) {
+        var val = f[k], ori;
+        if (propre[k] != null && String(propre[k]).trim() !== '') ori = 'saisi dans cette seance';
+        else if (val != null && String(val).trim() !== '') ori = 'repris de ' + (eff.source || 'une seance d avant');
+        else { val = profilDe(mac)[k]; ori = (val != null && val !== '') ? 'ancien profil de la voiture' : 'vide'; }
+        L.push([v.nom, mac, jour, sn.numJour, k, val == null ? '' : val, ori].map(csvChamp).join(';'));
+      });
+    });
+  });
+  return L.join('\n');
+}
+
+// ---- 07 : le catalogue des 8 voies, par seance -- la cle du decodage ----
+function expoCatalogue() {
+  var L = ['voiture;mac;jour;session;voie;nom;unite;idx_firmware;div;off;source;'
+         + 'resume_min;resume_moy;resume_max;resume_n'];
+  ordreVoitures.forEach(function (mac) {
+    var v = voitures[mac];
+    sessionsDe(v).forEach(function (sn) {
+      var lap = sn.best || sn.laps[0]; if (!lap || !lap.cat) return;
+      var jour = new Date(sn.debutMs).toISOString().slice(0, 10), ech = canEchantillons(lap);
+      for (var k = 0; k < 8; k++) {
+        var c = lap.cat.ch[k], it = k < 4 && lap.pv ? lap.pv.items[k] : null;
+        var src = (it && it.idx !== 255) ? 'resume du boitier (0x08)' : 'echantillons 1 Hz (0x0A)';
+        var rs = (it && it.idx !== 255) ? { min: it.min, moy: it.moy, max: it.max, n: it.n } : canResume(lap, ech, k);
+        L.push([v.nom, mac, jour, sn.numJour, 'p' + (k + 1), c ? c.nom : '', c ? c.unite : '',
+          c ? c.idx : '', c ? c.div : '', c ? c.off : '', src,
+          rs ? expoNb(rs.min) : '', rs ? expoNb(rs.moy) : '', rs ? expoNb(rs.max) : '', rs ? rs.n : '']
+          .map(csvChamp).join(';'));
+      }
+    });
+  });
+  return L.join('\n');
+}
+
+// ---- le bouton : tout part d'un coup ----
+// ⚠ Le navigateur refuse une rafale de telechargements. On les espace de 400 ms.
+function toutExporter() {
+  var h = expoHoro(), n = 0;
+  var lots = [
+    ['00_contexte', expoContexte],
+    ['01_tours', function () { return toursCsv(null, true); }],
+    ['02_secondes', expoSecondes],
+    ['03_traces', expoTraces],
+    ['04_secteurs', expoSecteursCsv],
+    ['05_deductions', expoDeductions],
+    ['06_fiches', expoFiches],
+    ['07_catalogue', expoCatalogue]
+  ];
+  jrn('Export complet : preparation...');
+  lots.forEach(function (lot, i) {
+    setTimeout(function () {
+      var t;
+      try { t = lot[1](); }
+      catch (e) { jrn('⚠ ' + lot[0] + ' a echoue : ' + e.message); return; }
+      // ⚠ un fichier vide est un defaut, pas un resultat : on le dit fort.
+      var lignes = t.split('\n').length - 1;
+      if (lignes < 1) { jrn('⚠ ' + lot[0] + ' est VIDE : rien a exporter.'); return; }
+      csvTelecharger('tracklogics_' + h + '_' + lot[0] + '.csv', t);
+      n++; jrn('  ' + lot[0] + ' : ' + lignes + ' ligne(s)');
+      if (i === lots.length - 1) setTimeout(function () {
+        sauvegarder();   // le brut complet, en JSON, pour tout reconstruire
+        jrn('Export complet : ' + n + ' fichier(s) CSV + la sauvegarde JSON.');
+      }, 400);
+    }, i * 400);
+  });
 }
 
 // ---- [v10] la base de circuits et les partielles ----
