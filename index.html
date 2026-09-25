@@ -498,7 +498,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.8';
+var PAGE_VER = 'TRACLOGICS v5.9';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -4123,8 +4123,16 @@ function expoCatalogue() {
 // ---- le bouton : tout part d'un coup ----
 // ⚠ Le navigateur refuse une rafale de telechargements. On les espace de 400 ms.
 function toutExporter() {
-  var h = expoHoro(), n = 0;
+  var h = expoHoro(), faits = 0, rates = [];
+  // ⚠ LE BRUT PART EN PREMIER. La sauvegarde JSON etait accrochee au SUCCES du dernier
+  // CSV : un fichier vide, une erreur, ou un navigateur qui bride la rafale, et elle ne
+  // sortait pas. Or c'est le SEUL fichier qui permet de TOUT reconstruire -- c'est le
+  // dernier qu'on doit perdre, pas le premier.
+  // ⚠ 700 ms ENTRE CHAQUE. Les navigateurs laissent tomber les telechargements trop
+  // rapproches, en silence. Et ils demandent l'autorisation pour les fichiers multiples :
+  // si la barre le propose, il faut l'accepter.
   var lots = [
+    [null, null],                 // la sauvegarde complete, en JSON
     ['00_contexte', expoContexte],
     ['01_tours', function () { return toursCsv(null, true); }],
     ['02_secondes', expoSecondes],
@@ -4134,23 +4142,31 @@ function toutExporter() {
     ['06_fiches', expoFiches],
     ['07_catalogue', expoCatalogue]
   ];
-  jrn('Export complet : preparation...');
+  jrn('Export complet : ' + lots.length + ' fichiers, un toutes les 0,7 s.');
   lots.forEach(function (lot, i) {
     setTimeout(function () {
+      if (lot[0] === null) {
+        try { sauvegarder(); faits++; }
+        catch (e) { rates.push('sauvegarde JSON (' + e.message + ')'); jrn('\u26a0 la sauvegarde JSON a echoue : ' + e.message); }
+        return;
+      }
       var t;
       try { t = lot[1](); }
-      catch (e) { jrn('⚠ ' + lot[0] + ' a echoue : ' + e.message); return; }
+      catch (e) { rates.push(lot[0] + ' (' + e.message + ')'); jrn('\u26a0 ' + lot[0] + ' a echoue : ' + e.message); return; }
       // ⚠ un fichier vide est un defaut, pas un resultat : on le dit fort.
       var lignes = t.split('\n').length - 1;
-      if (lignes < 1) { jrn('⚠ ' + lot[0] + ' est VIDE : rien a exporter.'); return; }
+      if (lignes < 1) { rates.push(lot[0] + ' (vide)'); jrn('\u26a0 ' + lot[0] + ' est VIDE : rien a exporter.'); return; }
       csvTelecharger('tracklogics_' + h + '_' + lot[0] + '.csv', t);
-      n++; jrn('  ' + lot[0] + ' : ' + lignes + ' ligne(s)');
-      if (i === lots.length - 1) setTimeout(function () {
-        sauvegarder();   // le brut complet, en JSON, pour tout reconstruire
-        jrn('Export complet : ' + n + ' fichier(s) CSV + la sauvegarde JSON.');
-      }, 400);
-    }, i * 400);
+      faits++; jrn('  ' + lot[0] + ' : ' + lignes + ' ligne(s)');
+    }, i * 700);
   });
+  // ⚠ LE BILAN NE DEPEND D'AUCUN FICHIER. Il part sur sa propre horloge : meme si tout
+  // echoue, il le dit.
+  setTimeout(function () {
+    if (rates.length) jrn('\u26a0 Export : ' + faits + ' fichier(s) sur ' + lots.length
+                          + ' \u2014 MANQUE : ' + rates.join(', '));
+    else jrn('Export complet : ' + faits + ' fichier(s), dont la sauvegarde JSON.');
+  }, lots.length * 700 + 900);
 }
 
 // ---- [v10] la base de circuits et les partielles ----
