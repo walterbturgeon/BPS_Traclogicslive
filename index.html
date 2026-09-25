@@ -498,7 +498,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.6';
+var PAGE_VER = 'TRACLOGICS v5.7';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -2344,20 +2344,22 @@ function memeTour(l, dureeMs) {
 function numSansEcraser(v, num, dureeMs) {
   var d = sessionDecal[v.mac] || (sessionDecal[v.mac] = {});
   var s0 = Math.floor(num / 200), t = num % 200;
-  // 1. ⚠ UN REJEU RESTE CHEZ LUI. L'ancienne garde rendait tout de suite la bande
-  //    deplacee, sans regarder la duree : quand la passerelle a rejoue les tours 206 a 210
-  //    de la seance de 13 h, ils sont partis en 606 a 610 -- cinq DOUBLONS, memes durees a
-  //    la milliseconde. On regarde donc la duree AVANT la bande.
-  if (memeTour(v.laps[num], dureeMs)) return num;
+  // 1. ⚠ UN REJEU PEUT AVOIR DEJA ETE DEPLACE. On ne regarde plus la seule place
+  //    d'origine : on cherche ce tour DANS TOUTES LES BANDES, par son numero de tour et
+  //    sa duree. Essai au banc du 24 sept. : les tours 206 a 209 dormaient en 606 a 609,
+  //    leur rejeu ne les a pas reconnus et est parti en 806 a 809 -- quatre doublons,
+  //    memes durees a la milliseconde.
+  for (var b = 0; b < 320; b++) {
+    var x = b * 200 + t;
+    if (memeTour(v.laps[x], dureeMs)) return x;
+  }
   // 2. on part de la bande de cette seance -- deplacee ou non -- et on avance jusqu'a une
-  //    place LIBRE ou qui porte deja ce tour. ⚠ ON VERIFIE TOUJOURS LA PLACE D'ARRIVEE :
-  //    suivre une bande sans regarder a ECRASE un tour le 24 sept. Le tour 1 d'une nouvelle
-  //    seance (169,158 s) a pris la place du tour deplace de la seance d'avant (153,480 s),
-  //    en gardant son heure de reception.
+  //    place LIBRE. ⚠ ON VERIFIE TOUJOURS LA PLACE D'ARRIVEE : suivre une bande sans
+  //    regarder a ECRASE un tour le 24 sept.
   var depart = (d[s0] != null) ? d[s0] : s0;
   for (var q = depart; q < 320; q++) {
     var c = q * 200 + t;
-    if (!v.laps[c] || memeTour(v.laps[c], dureeMs)) {
+    if (!v.laps[c]) {
       if (q !== s0) { d[s0] = q; decalSauver(); }
       if (c !== num) jrn('⚠ ' + v.nom + ' : le tour ' + num + ' est déjà pris par un autre tour ('
           + (v.laps[num] ? duree(v.laps[num].dureeMs) : '?') + ' contre ' + duree(dureeMs)
