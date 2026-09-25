@@ -498,7 +498,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.10';
+var PAGE_VER = 'TRACLOGICS v5.11';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -3088,6 +3088,8 @@ function sessionsDe(v) {
   // seance de Rivet, et TOUS ses vrais tours sont passes « hors analyse » a +400 %.
   ordre.forEach(function (k) {
     var sn = map[k];
+    sn.puits = new Set();   // [MT2 v5.11] les deux gardes, jugees une fois par calcul
+    sn.laps.forEach(function (l) { if (puitsDMax(sn, l) || puitsTrace(v, l)) sn.puits.add(l); });
     sn.laps.forEach(function (l) { if (l.dureeMs != null && !puitsDans(sn, l) && (!sn.best || l.dureeMs < sn.best.dureeMs)) sn.best = l; });
   });
   var out = ordre.map(function (k) {
@@ -3114,8 +3116,40 @@ function sessionDe(v, lap) { var k = lapSessionCle(lap), r = null; sessionsDe(v)
 // regle que le firmware PT2.1.47 : sous 30 % du plus grand ecart de la seance, c'est les puits.
 // Le tour reste affiche, avec son etiquette ; il ne compte ni comme meilleur, ni dans l'analyse.
 var PUITS_FRACTION = 0.30;
-function puitsDans(sn, l) { return !!(sn && l && l.dMax != null && sn.dMaxMax != null && l.dMax < PUITS_FRACTION * sn.dMaxMax); }
+function puitsDMax(sn, l) { return !!(sn && l && l.dMax != null && sn.dMaxMax != null && l.dMax < PUITS_FRACTION * sn.dMaxMax); }
+// [MT2 v5.11] la seance porte la liste de ses arrets aux puits (sessionsDe), les deux regles comprises
+function puitsDans(sn, l) { return !!(sn && l && (sn.puits ? sn.puits.has(l) : puitsDMax(sn, l))); }
 function estPuits(v, l) { return puitsDans(sessionDe(v, l), l); }
+// [MT2 v5.11] ⚠ LA DEUXIEME GARDE, INDEPENDANTE : UN TOUR DOIT COUVRIR 80 % DU CIRCUIT. La regle
+// des 30 % a deux trous : le 1er tour d'une seance n'a pas de reference, et un tour sans distance
+// maximale n'est pas juge. Celle-ci mesure la trace elle-meme contre la longueur du circuit connu
+// (Mont-Tremblant : 4235 m). Les manoeuvres du 25 sept. couvraient 98 m et 20 m ; le plus court des
+// vrais tours de la journee, 4063 m (96 %).
+// ⚠ Une trace INCOMPLETE ne se juge pas : ses morceaux arrivent un par un, et une trace coupee
+// (le tour 608 du 24 sept. : 2 morceaux sur 3) ferait crier au puits a tort. La regle des 30 % reste.
+var PUITS_COUVERTURE = 0.80;
+var puitsDistCache = new WeakMap();   // trace -> { n : points, d : metres } ; jamais sauvegarde
+function circuitLongueurProche(l) {
+  if (!circuits || l.oLat == null) return null;
+  var best = null;
+  circuits.forEach(function (k) {
+    var d = Math.hypot((l.oLat - k.oLat) * k.mLat, (l.oLon - k.oLon) * k.mLon);
+    if (d <= 5000 && (!best || d < best.d)) best = { d: d, L: k.longueur > 0 ? k.longueur : k.L };
+  });
+  return best ? best.L : null;
+}
+function puitsTrace(v, l) {
+  var t = v.traces[l.num]; if (!t || !t.nb) return false;
+  for (var i = 0; i < t.nb; i++) if (!t.parts[i]) return false;   // trace incomplete : on ne juge pas
+  var pts = traceEntiere(t); if (pts.length < 2) return false;
+  var c = puitsDistCache.get(t);
+  if (!c || c.n !== pts.length) {
+    var d = 0; for (var j = 1; j < pts.length; j++) d += Math.hypot(pts[j].dx - pts[j - 1].dx, pts[j].dy - pts[j - 1].dy);
+    c = { n: pts.length, d: d }; puitsDistCache.set(t, c);
+  }
+  var L = circuitLongueurProche(l); if (!L) return false;
+  return c.d < PUITS_COUVERTURE * L;
+}
 // les tours de la meme session (ordre croissant), ou de la meme journee
 function lapsSession(v, lap) { var sn = sessionDe(v, lap); return sn ? sn.laps : lapsTries(v); }
 function lapsJour(v, lap) { var sn = sessionDe(v, lap), out = []; if (!sn) return lapsTries(v); sessionsDe(v).forEach(function (x) { if (x.jour === sn.jour) out = out.concat(x.laps); }); return out; }
