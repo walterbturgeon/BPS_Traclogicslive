@@ -498,7 +498,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.7';
+var PAGE_VER = 'TRACLOGICS v5.8';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -1933,8 +1933,21 @@ function decodeTrace(v, b) {
   var dv = new DataView(b.buffer, b.byteOffset);
   var num = numRemap(v, dv.getUint16(1, true)), idx = b[3], nb = b[4], npts = b[5];   // [MT2 v5.3]
   var t = v.traces[num] || { parts: [], nb: nb }; t.nb = nb; t.intervalMs = dv.getUint16(6, true);   // [v10] pour les partielles
+  // [MT2 v5.8] 5 OU 6 OCTETS PAR POINT. Le PT2.1.46 ajoute le G lateral (int8, un pas de
+  // 0,02 G) et passe a 39 points par paquet au lieu de 46. Le paquet porte toujours son
+  // tableau ENTIER : sa longueur totale dit donc le format, sans avoir a deviner.
+  //     246 o = 16 + 46 x 5   PT2.1.45 et avant
+  //     250 o = 16 + 39 x 6   PT2.1.46 et apres
+  // ⚠ Toute autre longueur est refusee A VOIX HAUTE : lire une trace de travers donnerait
+  // une carte fausse sans le dire, ce qui est pire que pas de carte du tout.
+  var parPoint = (b.length === 250) ? 6 : (b.length === 246 ? 5 : 0);
+  if (!parPoint) { jrn('\u26a0 ' + v.nom + ' : trace de longueur inconnue (' + b.length + ' o), ignor\u00e9e'); return; }
   var pts = [], off = 16;
-  for (var i = 0; i < npts && off + 5 <= b.length; i++) { pts.push({ dx: dv.getInt16(off, true), dy: dv.getInt16(off + 2, true), kmh: b[off + 4] }); off += 5; }
+  for (var i = 0; i < npts && off + parPoint <= b.length; i++) {
+    var p = { dx: dv.getInt16(off, true), dy: dv.getInt16(off + 2, true), kmh: b[off + 4] };
+    if (parPoint === 6) p.gLat = dv.getInt8(off + 5) / 50;   // [MT2 v5.8] G lateral, 0,02 G par pas
+    pts.push(p); off += parPoint;
+  }
   t.parts[idx] = pts; v.traces[num] = t;
 }
 function traceEntiere(t) { if (!t) return []; var out = []; for (var i = 0; i < t.nb; i++) if (t.parts[i]) out = out.concat(t.parts[i]); return out; }
@@ -3877,7 +3890,7 @@ function expoSecondes() {
 
 // ---- 03 : TOUTES les traces, tous les tours, avec l'abscisse et le secteur ----
 function expoTraces() {
-  var L = ['voiture;mac;jour;session;tour;tour_fil;point;t_ms;dx_m;dy_m;kmh;lat;lon;abscisse_m;secteur;circuit'];
+  var L = ['voiture;mac;jour;session;tour;tour_fil;point;t_ms;dx_m;dy_m;kmh;g_lat;lat;lon;abscisse_m;secteur;circuit'];
   ordreVoitures.forEach(function (mac) {
     var v = voitures[mac];
     lapsTries(v).forEach(function (lap) {
@@ -3887,7 +3900,9 @@ function expoTraces() {
       pts.forEach(function (p, i) {
         var ll = expoLatLon(lap, p.dx, p.dy), sec = '';
         if (r && bo) { var j = 0; while (j < bo.length && r[i] >= bo[j]) j++; sec = j + 1; }
-        L.push(cle.concat([i, i * inter, p.dx, p.dy, p.kmh, ll[0], ll[1],
+        L.push(cle.concat([i, i * inter, p.dx, p.dy, p.kmh,
+                           p.gLat != null ? expoNb(p.gLat, 2) : '',   // [MT2 v5.8]
+                           ll[0], ll[1],
                            r ? expoNb(r[i], 1) : '', sec, S ? S.m.c.nom : '']).map(csvChamp).join(';'));
       });
     });
@@ -3895,10 +3910,28 @@ function expoTraces() {
   return L.join('\n');
 }
 
+// [MT2 v5.8] LE G LATERAL LE PLUS FORT D'UN SECTEUR. Le boitier range deja, sur chaque
+// point, le maximum vu depuis le point d'avant (PT2.1.46) : il suffit de prendre le plus
+// fort des points du secteur. Vide si le boitier ne l'envoie pas encore.
+function expoGLatMax(pts, res, iSect) {
+  if (!pts || !res || !res.r) return '';
+  var b0 = iSect === 0 ? 0 : res.bornes[iSect - 1];
+  var b1 = iSect < res.bornes.length ? res.bornes[iSect] : res.L;
+  var m = null;
+  for (var i = 0; i < pts.length; i++) {
+    if (res.r[i] < b0 || res.r[i] >= b1) continue;
+    var g = pts[i].gLat;
+    if (g == null) continue;
+    if (m == null || Math.abs(g) > Math.abs(m)) m = g;
+  }
+  return m == null ? '' : expoNb(m, 2);
+}
+
 // ---- 04 : les secteurs, avec LES QUATRE FAITS et l'ecart contre la reference ----
 function expoSecteursCsv() {
   var L = ['voiture;mac;jour;session;tour;tour_fil;secteur;bornes_mode;borne_debut_m;borne_fin_m;temps_s;'
          + 'kmh_min;v_entree;v_sortie;v_moy;freinage_m;gaz_pt_m;chemin_m;ecart_lat_m;'
+         + 'g_lat_max;'   // [MT2 v5.8] la charge laterale la plus forte du secteur
          + 'gaz_moy;rpm_moy;map_moy;map_plein_gaz;rpm_plein_gaz;n_plein_gaz;suralimente;'
          + 'ref_tour;ref_temps_s;delta_vs_ref_s;circuit'];
   ordreVoitures.forEach(function (mac) {
@@ -3923,6 +3956,7 @@ function expoSecteursCsv() {
         L.push(cle.concat([i + 1, mode, expoNb(b0, 1), expoNb(b1, 1), expoNb(t / 1000),
           expoNb(o.kmhMin, 1), expoNb(o.vEntree, 1), expoNb(o.vSortie, 1), expoNb(o.vMoy, 1),
           expoNb(o.freinage, 1), expoNb(o.gazPt, 1), expoNb(o.chemin, 1), expoNb(o.lat, 2),
+          expoGLatMax(S.pts, S.res, i), // [MT2 v5.8]
           expoNb(o.gaz, 1), expoNb(o.rpm, 0), expoNb(o.map, 1),
           expoNb(o.mapPlein, 1), expoNb(o.rpmPlein, 0), o.nP || 0, o.suralim ? 1 : 0,
           ref ? lapNumAff(ref) : '', rt != null ? expoNb(rt / 1000) : '',
