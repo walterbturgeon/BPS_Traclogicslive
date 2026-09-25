@@ -498,7 +498,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.9';
+var PAGE_VER = 'TRACLOGICS v5.10';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
@@ -538,6 +538,7 @@ function sensPareil(v, lap, autre) {   // [v79] deux tours comparables seulement
 function compReference(v, lap) {
   if (compMode === 'aucun') return null;
   var laps = (compMode === 'jour' ? lapsJour(v, lap) : lapsSession(v, lap)).filter(function (l) { return l.dureeMs != null && traceEntiere(v.traces[l.num]).length >= 10; });   // [v21] dans la session
+  laps = laps.filter(function (l) { return l === lap || !estPuits(v, l); });   // [MT2 v5.10] jamais un arret aux puits comme reference
   if (smartOn) laps = laps.filter(function (l) {   // [v44] meteo voisine, tours propres ; [v50] apres la remise a zero
     if (l === lap) return true;
     if (!meteoCompatible(lap, l) || horsAnalyse(v, l)) return false;
@@ -761,7 +762,7 @@ function cafeChoisir(quoi, val) { if (quoi === 'mac') { cafeMac = val; cafeA = c
 function cafeStats(v, sn) {
   var out = { n: 0, best: null, moy3: null, ecartType: null, sect: null, bornes: null, degres: null, pluie: null, bestLap: null };
   var t = sn.laps.filter(function (l) { return l.dureeMs != null && !horsAnalyse(v, l); });
-  if (!t.length) t = sn.laps.filter(function (l) { return l.dureeMs != null; });
+  if (!t.length) t = sn.laps.filter(function (l) { return l.dureeMs != null && !puitsDans(sn, l); });   // [MT2 v5.10] meme en repli, jamais les puits
   out.n = t.length; if (!t.length) return out;
   var tri = t.slice().sort(function (a, b) { return a.dureeMs - b.dureeMs; });
   out.best = tri[0].dureeMs; out.bestLap = tri[0];
@@ -1787,6 +1788,7 @@ function traiter(mac, p) {
   else if (p[0] === 0x0B) decodeCatalogue(v, p);   // [v20] libelles, unites, echelles de p1..p8
   else jrn('Type inconnu 0x' + p[0].toString(16) + ' pour ' + v.nom);
   marquer(mac, p.length >= 3 ? (p[1] | (p[2] << 8)) : null);   // [v22]
+  if (p[0] === 0x01 || p[0] === 0x02) corrigerDoubles(v);   // [MT2 v5.10] a chaque resume ou trace
   alerteVeille(mac);   // [v73] une limite atteinte s'entend, meme sur une autre voiture
   sauver(); rendre();
 }
@@ -1899,6 +1901,7 @@ function decodeTour(v, b) {
   num = numSansEcraser(v, num, dureeMs);   // [MT2 v5.3] meme numero + autre duree = autre seance
   var lap = v.laps[num] || { num: num };
   lap.dureeMs = dureeMs; lap.source = dv.getUint8(7);
+  delete lap.dureeBrutMs; delete lap.corrige;   // [MT2 v5.10] le boitier redit sa duree : corrigerDoubles() rejugera
   var vals = [], off = 8;
   for (var i = 0; i < NB_CANAUX; i++) { vals.push({ min: dv.getInt16(off, true), max: dv.getInt16(off + 2, true), avg: dv.getInt16(off + 4, true) }); off += 6; }
   lap.vals = vals; lap.flags = dv.getUint16(off, true); off += 2;
@@ -1945,7 +1948,9 @@ function decodeTrace(v, b) {
   var pts = [], off = 16;
   for (var i = 0; i < npts && off + parPoint <= b.length; i++) {
     var p = { dx: dv.getInt16(off, true), dy: dv.getInt16(off + 2, true), kmh: b[off + 4] };
-    if (parPoint === 6) p.gLat = dv.getInt8(off + 5) / 50;   // [MT2 v5.8] G lateral, 0,02 G par pas
+    // [MT2 v5.8] G lateral, 0,02 G par pas. [MT2 v5.10] ⚠ -128 = « ABSENT » (PT2.1.48 : IMU non
+    // calibree ou pas prete). Ce n'est PAS -2,56 G : on ne range rien, la case reste vide.
+    if (parPoint === 6) { var g8 = dv.getInt8(off + 5); p.gLat = g8 === -128 ? null : g8 / 50; }
     pts.push(p); off += parPoint;
   }
   t.parts[idx] = pts; v.traces[num] = t;
@@ -2352,7 +2357,9 @@ function numRemap(v, num) {
 // decide, au vu du resume : meme numero + autre duree = autre seance
 // deux tours de meme numero et de meme duree sont LE MEME TOUR, a 50 ms pres
 function memeTour(l, dureeMs) {
-  return !!(l && l.dureeMs != null && dureeMs != null && Math.abs(l.dureeMs - dureeMs) < 50);
+  // [MT2 v5.10] contre la duree BRUTE : un tour corrige garde celle que le boitier a envoyee
+  var d0 = l ? (l.dureeBrutMs != null ? l.dureeBrutMs : l.dureeMs) : null;
+  return !!(l && d0 != null && dureeMs != null && Math.abs(d0 - dureeMs) < 50);
 }
 function numSansEcraser(v, num, dureeMs) {
   var d = sessionDecal[v.mac] || (sessionDecal[v.mac] = {});
@@ -2416,6 +2423,7 @@ function gazMedianSeance(v, sn) {
 function horsAnalyse(v, lap) {
   if (lap.dureeMs == null) return 'sans temps';
   var sn = sessionDe(v, lap); if (!sn) return null;
+  if (puitsDans(sn, lap)) return 'arrêt aux puits';   // [MT2 v5.10]
   if (sn.laps.length > 1 && sn.laps[0] === lap) return 'sortie des puits';
   if (!sn.best || lap === sn.best) return null;
   var plusLent = lap.dureeMs / sn.best.dureeMs - 1;
@@ -3071,8 +3079,16 @@ function sessionsDe(v) {
   var map = {}, ordre = [];
   lapsTries(v).forEach(function (l) {
     var k = lapSessionCle(l); if (!map[k]) { map[k] = { cle: k, laps: [], best: null, motif: l.motif }; ordre.push(k); }
-    var sn = map[k]; sn.laps.push(l); if (l.dureeMs != null && (!sn.best || l.dureeMs < sn.best.dureeMs)) sn.best = l;
+    var sn = map[k]; sn.laps.push(l);
+    if (l.dMax != null && (sn.dMaxMax == null || l.dMax > sn.dMaxMax)) sn.dMaxMax = l.dMax;   // [MT2 v5.10]
     if (l.motif && !sn.motif) sn.motif = l.motif;
+  });
+  // [MT2 v5.10] LE MEILLEUR TOUR NE PEUT PAS ETRE UN ARRET AUX PUITS. Il etait le plus court, sans
+  // filtre : le 25 sept. 2026, un passage de 24,9 s aux puits est devenu « le meilleur » de la
+  // seance de Rivet, et TOUS ses vrais tours sont passes « hors analyse » a +400 %.
+  ordre.forEach(function (k) {
+    var sn = map[k];
+    sn.laps.forEach(function (l) { if (l.dureeMs != null && !puitsDans(sn, l) && (!sn.best || l.dureeMs < sn.best.dureeMs)) sn.best = l; });
   });
   var out = ordre.map(function (k) {
     var sn = map[k], l0 = sn.laps[0], lN = sn.laps[sn.laps.length - 1];
@@ -3092,6 +3108,14 @@ function sessionsDe(v) {
   return out;
 }
 function sessionDe(v, lap) { var k = lapSessionCle(lap), r = null; sessionsDe(v).forEach(function (sn) { if (sn.cle === k) r = sn; }); return r; }
+// [MT2 v5.10] ⚠ UN ARRET AUX PUITS N'EST PAS UN TOUR. Le DLPT2 jusqu'a PT2.1.46 fermait un « tour »
+// chaque fois que la voiture manoeuvrait pres de la balise : 44 s, 25 s, 50 s le 25 sept. 2026,
+// sans jamais s'eloigner a plus de 157, 89 et 96 m, contre 1350-1361 m pour un vrai tour. La meme
+// regle que le firmware PT2.1.47 : sous 30 % du plus grand ecart de la seance, c'est les puits.
+// Le tour reste affiche, avec son etiquette ; il ne compte ni comme meilleur, ni dans l'analyse.
+var PUITS_FRACTION = 0.30;
+function puitsDans(sn, l) { return !!(sn && l && l.dMax != null && sn.dMaxMax != null && l.dMax < PUITS_FRACTION * sn.dMaxMax); }
+function estPuits(v, l) { return puitsDans(sessionDe(v, l), l); }
 // les tours de la meme session (ordre croissant), ou de la meme journee
 function lapsSession(v, lap) { var sn = sessionDe(v, lap); return sn ? sn.laps : lapsTries(v); }
 function lapsJour(v, lap) { var sn = sessionDe(v, lap), out = []; if (!sn) return lapsTries(v); sessionsDe(v).forEach(function (x) { if (x.jour === sn.jour) out = out.concat(x.laps); }); return out; }
@@ -3107,6 +3131,41 @@ var sessionsRepliees = {};   // ce que le doigt a replie, garde d'un rendu a l'a
 // (n modulo 200), la meme duree a 50 ms pres, ET une trace de meme longueur. Les trois
 // ensemble : une coincidence sur les trois est hors de portee. On garde celui de la bande
 // la plus basse -- l'original -- et on dit ce qu'on enleve.
+// [MT2 v5.10] ⚠ LE TOUR GPS QUI SUIT UN PASSAGE AUX PUITS ETAIT COMPTE DEUX FOIS (DLPT2 jusqu'a
+// PT2.1.46). Un passage sans croisement de la ligne (voie des puits, sous 30 km/h) fermait un tour
+// au temps radio sans rafraichir la reference GPS : le tour GPS suivant comptait depuis l'ancien
+// croisement et englobait les tours radio. 25 sept. 2026, kit 28 : 353 s, 400 s et 176 s au lieu
+// de 147, 185 et 151 -- la somme des seuls tours GPS valait la seance.
+// On retranche donc les tours radio qui le precedent, MAIS SEULEMENT SI SA TRACE LE CONFIRME : la
+// trace repart a chaque fermeture, elle couvre donc le vrai tour. Il faut que la duree brute depasse
+// la trace de plus de 10 % ET que la duree corrigee tombe a 10 % pres de la trace. Un tour de
+// PT2.1.47 ou plus ne remplit jamais ces deux conditions : il n'est pas touche.
+// La duree brute reste dans dureeBrutMs : un rejeu se reconnait a elle, et l'export la donne.
+function corrigerDoubles(v) {
+  var faits = 0;
+  sessionsDe(v).forEach(function (sn) {
+    var radio = 0;
+    sn.laps.forEach(function (l) {
+      if (l.dureeMs == null || l.source == null) return;
+      var brut = l.dureeBrutMs != null ? l.dureeBrutMs : l.dureeMs;
+      if (l.source !== 1) { radio += brut; return; }
+      var avant = l.dureeMs, t = v.traces[l.num], pts = traceEntiere(t);
+      var couvre = (t && t.intervalMs && pts.length > 1) ? (pts.length - 1) * t.intervalMs : null;
+      var corr = brut - radio;
+      if (radio > 0 && couvre && brut > 1.10 * couvre && corr > 0 && Math.abs(corr - couvre) < 0.10 * couvre) {
+        l.dureeBrutMs = brut; l.dureeMs = corr;
+        l.corrige = 'compté deux fois par le boîtier : englobait ' + duree(radio) + ' de passage(s) aux puits';
+      } else if (l.dureeBrutMs != null) { l.dureeMs = l.dureeBrutMs; delete l.dureeBrutMs; delete l.corrige; }
+      if (l.dureeMs !== avant) {
+        faits++; marquer(v.mac, l.num);
+        jrn(v.nom + ' : tour #' + lapNumAff(l) + (l.corrige ? ' corrigé ' + duree(brut) + ' → ' + duree(l.dureeMs) + ' (' + l.corrige + ', trace ' + duree(couvre) + ')'
+                                                          : ' rendu à sa durée brute ' + duree(l.dureeMs)));
+      }
+      radio = 0;
+    });
+  });
+  return faits;
+}
 function doublonsRetirer(v) {
   // deux traces sont la meme quand la plus courte est le DEBUT EXACT de la plus longue.
   // ⚠ Une salve peut etre coupee : le tour 608 du 24 sept. portait 92 points sur 138,
@@ -3133,7 +3192,7 @@ function doublonsRetirer(v) {
       var nb = nums[b], lb = v.laps[nb];
       if (!lb || lb.dureeMs == null) continue;
       if (na % 200 !== nb % 200) continue;
-      if (Math.abs(la.dureeMs - lb.dureeMs) >= 50) continue;
+      if (Math.abs((la.dureeBrutMs != null ? la.dureeBrutMs : la.dureeMs) - (lb.dureeBrutMs != null ? lb.dureeBrutMs : lb.dureeMs)) >= 50) continue;   // [MT2 v5.10] brut contre brut
       if (!memeTrace(traceEntiere(v.traces[na]), traceEntiere(v.traces[nb]))) continue;
       // on garde le plus complet ; a egalite, le plus ancien numero
       var garde = richesse(v, nb) > richesse(v, na) ? nb : na;
@@ -3178,6 +3237,7 @@ function catsRelier() {
     Object.keys(v.laps).forEach(function (n) { var l = v.laps[n]; if (!l.cat && v.cats[lapSessionCle(l)]) l.cat = v.cats[lapSessionCle(l)]; });
     seancesDemeler(v);   // [MT2 v5.4] deux seances dans une meme bande : on les separe
     doublonsRetirer(v);  // [MT2 v5.6] et les doublons fabriques par l ancienne garde
+    if (corrigerDoubles(v)) sauver();   // [MT2 v5.10] les tours comptes deux fois par un boitier <= 1.46
   });
 }
 function rendre() {   // [v17] la position verticale est gardee : seul le doigt fait defiler
@@ -3220,7 +3280,9 @@ function rendre0() {
     sn.laps.slice().reverse().forEach(function (l, j) {
       var prec = sn.laps[sn.laps.length - 2 - j] || null;
       hb += '<tr class="clic' + (l.num === vueTour ? ' sel' : '') + '" data-num="' + l.num + '"><td>#' + lapNumAff(l) + (sn.best && l === sn.best ? ' ★' : '')
-        + (smartOn && horsAnalyse(v, l) ? ' <span class="small" style="opacity:.65">hors analyse</span>' : '') + '</td><td class="num">' + duree(l.dureeMs) + '</td><td class="num">'
+        + (puitsDans(sn, l) ? ' <span class="small" style="opacity:.65">puits</span>'   // [MT2 v5.10] meme sans le smart
+           : (smartOn && horsAnalyse(v, l) ? ' <span class="small" style="opacity:.65">hors analyse</span>' : '')) + '</td><td class="num">' + duree(l.dureeMs)
+        + (l.corrige ? ' <span class="small" title="' + l.corrige + ' — brut ' + duree(l.dureeBrutMs) + '">corr.</span>' : '') + '</td><td class="num">'   // [MT2 v5.10]
         + (prec && prec.dureeMs != null && l.dureeMs != null ? ecartTexte(l.dureeMs - prec.dureeMs) : '—') + '</td>'
         + (smartOn ? '<td class="num">' + (sn.best && l.dureeMs != null && l !== sn.best
             ? '<span style="color:' + (l.dureeMs - sn.best.dureeMs <= 0 ? 'var(--ok)' : 'var(--warn)') + '">' + ecartTexte(l.dureeMs - sn.best.dureeMs) + '</span>'
@@ -3728,7 +3790,7 @@ function csvTelecharger(nom, texte) {
 }
 function csvChamp(x) { x = String(x == null ? '' : x); return /[;"\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }
 function toursCsv(filtreMac, rendreTexte) {   // [v43] une seule voiture, et le texte au lieu du fichier
-  var lignes = ['voiture;mac;num;jour;session;session_debut;tour;tour_fil;tour_debut;tour_fin;temps_s;ecart_precedent_s;chrono;recu;p1_nom;p1_unite;p1_min;p1_moy;p1_max;p1_n;p2_nom;p2_unite;p2_min;p2_moy;p2_max;p2_n;p3_nom;p3_unite;p3_min;p3_moy;p3_max;p3_n;p4_nom;p4_unite;p4_min;p4_moy;p4_max;p4_n;p5_nom;p5_unite;p5_min;p5_moy;p5_max;p5_n;p6_nom;p6_unite;p6_min;p6_moy;p6_max;p6_n;p7_nom;p7_unite;p7_min;p7_moy;p7_max;p7_n;p8_nom;p8_unite;p8_min;p8_moy;p8_max;p8_n;meteo_c;meteo_mm_h;meteo_heure;origine_lat;origine_lon;dist_max_m;points_trace'];
+  var lignes = ['voiture;mac;num;jour;session;session_debut;tour;tour_fil;tour_debut;tour_fin;temps_s;ecart_precedent_s;chrono;recu;p1_nom;p1_unite;p1_min;p1_moy;p1_max;p1_n;p2_nom;p2_unite;p2_min;p2_moy;p2_max;p2_n;p3_nom;p3_unite;p3_min;p3_moy;p3_max;p3_n;p4_nom;p4_unite;p4_min;p4_moy;p4_max;p4_n;p5_nom;p5_unite;p5_min;p5_moy;p5_max;p5_n;p6_nom;p6_unite;p6_min;p6_moy;p6_max;p6_n;p7_nom;p7_unite;p7_min;p7_moy;p7_max;p7_n;p8_nom;p8_unite;p8_min;p8_moy;p8_max;p8_n;meteo_c;meteo_mm_h;meteo_heure;origine_lat;origine_lon;dist_max_m;points_trace;temps_brut_s;correction;arret_puits'];
   ordreVoitures.forEach(function (m) {
     if (filtreMac && m !== filtreMac) return;
     var v = voitures[m], laps = lapsTries(v), sessions = sessionsDe(v);
@@ -3746,6 +3808,7 @@ function toursCsv(filtreMac, rendreTexte) {   // [v43] une seule voiture, et le 
       }
       r.push(l.meteo ? l.meteo.degres : '', l.meteo ? l.meteo.pluie : '', l.meteo ? iso(l.meteo.t) : '');   // [v39] la meteo du tour
       r.push(l.oLat != null ? l.oLat.toFixed(7) : '', l.oLon != null ? l.oLon.toFixed(7) : '', l.dMax != null ? l.dMax : '', traceEntiere(v.traces[l.num]).length);
+      r.push(l.dureeBrutMs != null ? (l.dureeBrutMs / 1000).toFixed(3) : '', l.corrige || '', puitsDans(sn, l) ? 1 : '');   // [MT2 v5.10]
       lignes.push(r.map(csvChamp).join(';'));
     });
   });
