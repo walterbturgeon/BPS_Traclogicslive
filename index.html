@@ -2,7 +2,7 @@
 <html lang="fr-CA">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>TRACLOGICS Live</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-mt-192.png" type="image/png"><link rel="apple-touch-icon" href="icon-mt-192.png">
@@ -14,6 +14,11 @@
      que l habillage RACELOG plus bas : en mode auto la page prenait l ancienne
      palette. L habillage definit maintenant les trois modes, plus bas et seul. */
   * { box-sizing:border-box; }
+  /* [MT2 v5.12] LA PAGE NE ZOOME PLUS. Seule la carte bloquait le geste a deux doigts
+     (touch-action:none) : sans tour affiche, il n y a pas de carte, le doigt zoomait la page
+     entiere et la barre du bas, fixe, suivait la page zoomee. On defile, on ne zoome pas ;
+     la carte garde son propre zoom en vue libre. Plus de rebond ni de tirer-pour-recharger. */
+  html, body { touch-action:pan-x pan-y; overscroll-behavior:none; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:16px; }
   header { padding:12px 16px 8px; display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
   /* [v24] LE BANDEAU RESTE EN HAUT. Le bouton de connexion et les onglets des voitures ne doivent
@@ -498,7 +503,7 @@
 // le numero de serie (MAC) en sous-texte. Tout est range par MAC.
 // Pas de live, pas de LoRa : le tour, ses 4 valeurs (avec les libelles que
 // le module envoie), sa trace, sa carte.
-var PAGE_VER = 'TRACLOGICS v5.11';
+var PAGE_VER = 'TRACLOGICS v5.12';
 // [v15] LA COMPARAISON. Le tour affiche est compare a un tour de REFERENCE de la
 // meme voiture : son meilleur tour, ou le tour precedent. Sur la carte, la couleur
 // n'est plus la vitesse mais le DELTA de vitesse au meme endroit du tour (vert :
